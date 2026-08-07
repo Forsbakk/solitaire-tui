@@ -55,14 +55,21 @@ Prebuilt binaries for Linux, Windows and macOS are on the
 nothing to install alongside them — download, extract, run. The Linux builds are
 statically linked, so they do not care which distro they land on.
 
-To build it yourself instead, with Rust 1.88 or newer:
+On Arch, from the AUR — `solitaire-tui` builds from source, `solitaire-tui-bin`
+drops in the prebuilt binary:
 
 ```sh
-cargo install --git https://github.com/Forsbakk/solitaire-tui
+paru -S solitaire-tui-bin
 ```
 
-That puts a `solitaire` binary in `~/.cargo/bin`. To work on it, clone the
-repository and use `cargo run` as below.
+Or with Rust 1.88 or newer, from crates.io:
+
+```sh
+cargo install solitaire-tui
+```
+
+Either way the binary is called `solitaire`. To work on it, clone the repository
+and use `cargo run` as below.
 
 Any terminal with 256 colours and a font covering `♠ ♥ ♦ ♣` will do. On Windows
 use Windows Terminal rather than the legacy console host, which cannot render

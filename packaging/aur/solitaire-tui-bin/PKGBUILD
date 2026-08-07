@@ -1,0 +1,28 @@
+# Maintainer: Jonas Forsbakk <jonas@forsbakk.priv.no>
+
+pkgname=solitaire-tui-bin
+_pkgname=solitaire-tui
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Six solitaire games in the terminal, built with ratatui (prebuilt binary)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Forsbakk/solitaire-tui'
+license=('MIT OR Apache-2.0')
+# The upstream binaries are statically linked against musl, so they pull in
+# nothing at all.
+depends=()
+provides=("$_pkgname=$pkgver")
+# The AUR's `solitaire` (GNOME's patience game) also installs /usr/bin/solitaire.
+conflicts=('solitaire' "$_pkgname")
+_url_base="$url/releases/download/v$pkgver/solitaire-v$pkgver"
+source_x86_64=("$pkgname-$pkgver-x86_64.tar.gz::$_url_base-x86_64-unknown-linux-musl.tar.gz")
+source_aarch64=("$pkgname-$pkgver-aarch64.tar.gz::$_url_base-aarch64-unknown-linux-musl.tar.gz")
+sha256sums_x86_64=('38ffeb860b6863c82d6159191bd4ef2c3c9f387dd0a334216c1f1db811e9ef73')
+sha256sums_aarch64=('68aa967ef13efd5d7fc1959be40967a14ff4948f1af32a9cac9642d67efb6b3f')
+
+package() {
+  # The release archives are flat — binary, README and both licences at the top.
+  install -Dm0755 -t "$pkgdir/usr/bin/" solitaire
+  install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE-MIT LICENSE-APACHE
+  install -Dm0644 -t "$pkgdir/usr/share/doc/$pkgname/" README.md
+}

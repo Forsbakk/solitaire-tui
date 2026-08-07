@@ -1,0 +1,17 @@
+pkgbase = solitaire-tui-bin
+	pkgdesc = Six solitaire games in the terminal, built with ratatui (prebuilt binary)
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/Forsbakk/solitaire-tui
+	arch = x86_64
+	arch = aarch64
+	license = MIT OR Apache-2.0
+	provides = solitaire-tui=0.1.0
+	conflicts = solitaire
+	conflicts = solitaire-tui
+	source_x86_64 = solitaire-tui-bin-0.1.0-x86_64.tar.gz::https://github.com/Forsbakk/solitaire-tui/releases/download/v0.1.0/solitaire-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+	sha256sums_x86_64 = 38ffeb860b6863c82d6159191bd4ef2c3c9f387dd0a334216c1f1db811e9ef73
+	source_aarch64 = solitaire-tui-bin-0.1.0-aarch64.tar.gz::https://github.com/Forsbakk/solitaire-tui/releases/download/v0.1.0/solitaire-v0.1.0-aarch64-unknown-linux-musl.tar.gz
+	sha256sums_aarch64 = 68aa967ef13efd5d7fc1959be40967a14ff4948f1af32a9cac9642d67efb6b3f
+
+pkgname = solitaire-tui-bin
