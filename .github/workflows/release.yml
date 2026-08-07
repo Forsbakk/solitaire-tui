@@ -19,7 +19,24 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # upload-rust-binary-action only uploads — it will not create the release it
+  # uploads into, and fails with "release not found" if one is missing. This job
+  # makes it. Skipped on a rehearsal, which uploads nothing anyway.
+  create-release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   binaries:
+    needs: create-release
+    # `needs` alone would skip the whole matrix on a rehearsal, because a
+    # skipped dependency skips its dependents.
+    if: always() && (needs.create-release.result == 'success'
+      || github.event_name == 'workflow_dispatch')
     strategy:
       fail-fast: false
       matrix:
