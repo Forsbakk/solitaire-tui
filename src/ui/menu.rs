@@ -16,7 +16,7 @@ use ratatui::widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget, Wra
 use ratatui::{DefaultTerminal, Frame};
 
 use crate::rules::{self, Rules};
-use crate::ui::render::centered;
+use crate::ui::render::{centered, wrapped_height};
 
 const CURSOR: Color = Color::Cyan;
 const MUTED: Color = Color::DarkGray;
@@ -401,31 +401,6 @@ impl Menu {
 
 fn contains(rect: &Rect, x: u16, y: u16) -> bool {
     x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
-}
-
-/// How many rows `text` needs once wrapped to `width`.
-fn wrapped_height(text: &str, width: u16) -> u16 {
-    if width == 0 {
-        return 0;
-    }
-    text.lines()
-        .map(|line| {
-            let mut rows = 1;
-            let mut used = 0;
-            for word in line.split_whitespace() {
-                let len = word.chars().count() as u16;
-                if used == 0 {
-                    used = len;
-                } else if used + 1 + len <= width {
-                    used += 1 + len;
-                } else {
-                    rows += 1;
-                    used = len;
-                }
-            }
-            rows
-        })
-        .sum()
 }
 
 #[cfg(test)]

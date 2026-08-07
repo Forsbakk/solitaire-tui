@@ -420,10 +420,27 @@ impl Session {
     }
 
     /// Send the card under the cursor to wherever it belongs.
+    /// Send a card to wherever it belongs, without naming the pile.
+    ///
+    /// Acts on the card in hand when one is held, so picking a card up and
+    /// pressing this finishes the move — at most one foundation can take any
+    /// given card, so there is nothing to choose between.
     fn send_home(&mut self) {
-        match self.rules.send_home(&self.board, self.cursor_pile) {
+        let from = match self.selection {
+            Some((pile, index)) => {
+                if self.board.pile(pile).len() - index > 1 {
+                    self.warn("Only a single card can be sent on its own.");
+                    return;
+                }
+                pile
+            }
+            None => self.cursor_pile,
+        };
+
+        match self.rules.send_home(&self.board, from) {
             Some(action) => {
                 self.selection = None;
+                self.hint = None;
                 self.perform(action);
             }
             None => self.warn("That card has nowhere to go yet."),
@@ -1133,6 +1150,38 @@ mod tests {
         assert!(view.contains("undo"));
     }
 
+    #[test]
+    fn the_help_popup_is_tall_enough_for_everything_it_lists() {
+        // Its height comes from the *wrapped* text, not the raw line count —
+        // the blurb wraps, and counting raw lines clips the last bindings off
+        // the bottom. Measured against the drawn borders, since single-letter
+        // keys like `q` also appear in the status bar and prove nothing.
+        for (mut session, name) in [(scorpion(42), "Scorpion"), (klondike(42), "Klondike")] {
+            let text = render::help_text(session.rules.as_ref());
+            let needed = render::wrapped_height(&text, render::HELP_INNER_W as u16) as usize;
+
+            press(&mut session, KeyCode::Char('?'));
+            let view = screen(&mut session, 100, 40);
+            let borders: Vec<usize> = view
+                .lines()
+                .enumerate()
+                .filter(|(_, line)| line.contains('╭') || line.contains('╰'))
+                .map(|(row, _)| row)
+                .collect();
+
+            assert_eq!(borders.len(), 2, "{name}: popup is not closed:\n{view}");
+            let inside = borders[1] - borders[0] - 1;
+            assert!(
+                inside >= needed,
+                "{name}: popup holds {inside} rows but the help needs {needed}:\n{view}"
+            );
+            assert!(
+                view.contains("close this help"),
+                "{name}: the last bindings were clipped:\n{view}"
+            );
+        }
+    }
+
     // -- a second game, on the same machinery ----------------------------
 
     fn klondike(seed: u64) -> Session {
@@ -1429,6 +1478,124 @@ mod tests {
         assert_eq!(session.cursor_card, None, "there is no card to sit on");
         assert_eq!(view.matches('╔').count(), 1, "but the pile is still marked");
         assert!(view.contains('↻'), "and says it can be refilled");
+    }
+
+    #[test]
+    fn f_sends_the_card_you_are_holding_without_naming_a_foundation() {
+        let mut session = klondike(42);
+        // Pile 3 opens with A♠ exposed in this deal.
+        let ace = (0..7)
+            .find(|&pile| {
+                session
+                    .board
+                    .pile(pile)
+                    .exposed()
+                    .is_some_and(|card| card.rank == 1)
+            })
+            .expect("this deal exposes an ace");
+
+        session.cursor_pile = ace;
+        session.snap_cursor();
+        press(&mut session, KeyCode::Char(' '));
+        assert!(session.selection.is_some(), "the ace is in hand");
+
+        press(&mut session, KeyCode::Char('f'));
+        assert!(session.selection.is_none(), "and it was played");
+        assert_eq!(session.history.len(), 1, "{}", session.message);
+
+        let home: usize = session
+            .board
+            .of_kind(PileKind::Foundation)
+            .map(|pile| session.board.pile(pile).len())
+            .sum();
+        assert_eq!(home, 1, "onto a foundation, without choosing which");
+    }
+
+    #[test]
+    fn an_ace_goes_to_the_first_free_foundation() {
+        let mut session = klondike(42);
+        let foundations: Vec<PileId> = session.board.of_kind(PileKind::Foundation).collect();
+
+        // Send the first two aces this deal offers and watch them fill the
+        // foundations in order — any empty one will take an ace, so the choice
+        // has to be made for the player rather than left to them.
+        let mut filled = 0;
+        for pile in 0..7 {
+            if session
+                .board
+                .pile(pile)
+                .exposed()
+                .is_some_and(|card| card.rank == 1)
+            {
+                session.cursor_pile = pile;
+                session.snap_cursor();
+                press(&mut session, KeyCode::Char('f'));
+                filled += 1;
+                assert_eq!(
+                    session.board.pile(foundations[filled - 1]).len(),
+                    1,
+                    "ace {filled} took foundation {}",
+                    filled - 1
+                );
+            }
+        }
+        assert!(filled > 0, "this deal exposes at least one ace");
+        for &pile in &foundations[filled..] {
+            assert!(session.board.pile(pile).is_empty(), "the rest stay empty");
+        }
+    }
+
+    #[test]
+    fn f_refuses_to_break_up_a_run_you_are_holding() {
+        let mut session = klondike(42);
+        press(&mut session, KeyCode::Char('d'));
+
+        // Build a two-card run in hand by lifting from a tableau pile that has
+        // more than one face-up card, then ask to send it home.
+        let deep = (0..7).find(|&pile| {
+            let p = session.board.pile(pile);
+            p.len() - p.face_down() > 1
+        });
+        let Some(pile) = deep else { return };
+
+        session.cursor_pile = pile;
+        session.cursor_card = Some(session.board.pile(pile).face_down());
+        press(&mut session, KeyCode::Char(' '));
+        assert!(session.selection.is_some());
+
+        press(&mut session, KeyCode::Char('f'));
+        assert!(session.selection.is_some(), "still holding the run");
+        assert!(
+            session.message.contains("single card"),
+            "got {:?}",
+            session.message
+        );
+    }
+
+    #[test]
+    fn the_status_line_offers_the_shortcut_when_it_would_work() {
+        let mut session = klondike(42);
+        let ace = (0..7)
+            .find(|&pile| {
+                session
+                    .board
+                    .pile(pile)
+                    .exposed()
+                    .is_some_and(|card| card.rank == 1)
+            })
+            .unwrap();
+
+        session.cursor_pile = ace;
+        session.snap_cursor();
+        press(&mut session, KeyCode::Char(' '));
+        let view = screen(&mut session, 80, 24);
+        assert!(view.contains("f to send it home"), "got:\n{view}");
+
+        // A card with nowhere to go says nothing about it.
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char(' '));
+        let view = screen(&mut session, 80, 30);
+        assert!(!view.contains("send it home"), "got:\n{view}");
     }
 
     #[test]

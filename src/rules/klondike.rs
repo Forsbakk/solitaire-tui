@@ -104,7 +104,7 @@ impl Rules for Klondike {
 
     fn help(&self) -> &'static str {
         "  d             turn the stock (space on the stock does it too)\n\
-         \x20 f             send the card under the cursor to a foundation\n\
+         \x20 f             send a card home, held or under the cursor\n\
          \x20 A             finish the game once every card is free"
     }
 

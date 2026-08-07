@@ -333,7 +333,7 @@ Defined in `src/rules/mod.rs`.
 | --- | --- | --- |
 | `action_for(board, mv)` | `Action::moving(...)` — lift a tail onto another pile | the move does more than move cards |
 | `activate(board, pile)` | `None` | a pile *does* something when pressed: deal, draw, recycle |
-| `send_home(board, from)` | `None` | the game has foundations and wants the `f` key |
+| `send_home(board, from)` | `None` | the game has foundations and wants the `f` key. The app passes the pile of the card in hand when one is held, so it must work for a lone card as well as for the pile under the cursor |
 | `autoplay(board)` | `None` | a decided position should be playable out with `A` |
 | `is_useful(board, mv)` | `true` | some legal moves are pointless |
 | `rank(board, mv)` | `0` | you want hints in a sensible order (you do) |

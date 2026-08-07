@@ -79,8 +79,10 @@ are the stock.
   though only the one on top is in play — clicking any of them picks up that
   top card. When the stock runs out, the same key puts the waste back, as often
   as the **Redeals** rule allows.
-* The four **foundations** build up in suit from the Ace. `f` sends the card
-  under the cursor to one if it fits.
+* The four **foundations** build up in suit from the Ace. `f` sends a card to
+  the one that will take it — the card you are holding, or the one under the
+  cursor. There is never a choice to make: at most one foundation accepts any
+  given card, and an Ace simply takes the first free one.
 * Win by sending all 52 cards home. Once nothing is face down and the stock is
   spent, `A` plays out the rest.
 
@@ -114,7 +116,7 @@ same cards again from the start.
 | `space` `enter` | pick up the card under the cursor, or drop what you hold |
 | `esc` | put a held card back |
 | `d` | turn or deal the stock |
-| `f` | send a card to a foundation (Klondike) |
+| `f` | send a card to its foundation — the one held, or under the cursor (Klondike) |
 | `A` | play out a decided game (Klondike) |
 | `H` | suggest a move; press again for the next one |
 | `u` / `ctrl-r` | undo / redo |

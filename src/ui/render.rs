@@ -25,21 +25,28 @@ const RECYCLE: &str = " ↻  ";
 
 /// Keys that mean the same thing in every game. A game's own `help` adds to
 /// this rather than repeating it.
-const SHARED_HELP: &str = "\
-  ← →  h l      move between piles
+///
+/// These start on the opening quote rather than after a `\` continuation: that
+/// escape swallows the *leading whitespace* of the line it joins, which would
+/// quietly strip the first entry's indent and leave it hanging in the popup.
+const SHARED_HELP: &str = "  ← →  h l      move between piles
   ↑ ↓  k j      move up and down a pile
   1 … 9         jump to a tableau pile, or drop there
   space enter   pick up the card under the cursor, or drop
   esc           put a held card back";
 
-const SHARED_HELP_TAIL: &str = "\
-  H             suggest a move; press again for the next one
+const SHARED_HELP_TAIL: &str = "  H             suggest a move; press again for the next one
   u  ctrl-r     undo / redo
   n  r          new game / replay this deal
   m             back to the menu
   click         pick up a card, then click a pile
   ?             close this help
   q             quit";
+
+/// Width of the help popup. Its key lines must not wrap — see `help_text`.
+const HELP_W: u16 = 68;
+/// The cells a help line has, once borders and padding are taken off.
+pub const HELP_INNER_W: usize = HELP_W as usize - 4;
 
 /// The four rows a card box can need. Highlighted cards switch to a heavier
 /// line so they stand out even where colour is washed out or absent.
@@ -507,9 +514,16 @@ pub fn draw_status(
         Span::styled(message, Style::new().fg(color))
     } else if let Some((pile, index)) = focus.selection {
         let held = board.pile(pile).len() - index;
+        // A card that has a foundation waiting can be sent there without
+        // hunting for which one, so say so rather than leaving it to the help.
+        let home = if held == 1 && rules.send_home(board, pile).is_some() {
+            ", or f to send it home"
+        } else {
+            ""
+        };
         Span::styled(
             format!(
-                "holding {held} card{} — choose a pile to drop on (esc to cancel)",
+                "holding {held} card{} — choose a pile to drop on{home} (esc to cancel)",
                 if held == 1 { "" } else { "s" }
             ),
             Style::new().fg(SELECTED),
@@ -592,8 +606,10 @@ pub fn help_text(rules: &dyn Rules) -> String {
 
 pub fn draw_help(buffer: &mut Buffer, area: Rect, rules: &dyn Rules) {
     let text = help_text(rules);
-    let lines = text.lines().count() as u16;
-    let popup = centered(64, lines + 2, area);
+    // Counting raw lines would undercount: the blurb wraps, and the popup
+    // would then clip its last few key bindings.
+    let height = wrapped_height(&text, HELP_INNER_W as u16) + 2;
+    let popup = centered(HELP_W, height, area);
     Clear.render(popup, buffer);
 
     let block = Block::bordered()
@@ -605,6 +621,31 @@ pub fn draw_help(buffer: &mut Buffer, area: Rect, rules: &dyn Rules) {
         .wrap(Wrap { trim: false })
         .block(block)
         .render(popup, buffer);
+}
+
+/// How many rows `text` needs once wrapped to `width`.
+pub fn wrapped_height(text: &str, width: u16) -> u16 {
+    if width == 0 {
+        return 0;
+    }
+    text.lines()
+        .map(|line| {
+            let mut rows = 1;
+            let mut used = 0;
+            for word in line.split_whitespace() {
+                let len = word.chars().count() as u16;
+                if used == 0 {
+                    used = len;
+                } else if used + 1 + len <= width {
+                    used += 1 + len;
+                } else {
+                    rows += 1;
+                    used = len;
+                }
+            }
+            rows
+        })
+        .sum()
 }
 
 /// A `width` × `height` rect centred in `area`, clamped to fit.
@@ -646,6 +687,30 @@ mod tests {
         assert!(view.contains("You win!"), "got:\n{view}");
         assert!(view.contains("Scorpion"), "got:\n{view}");
         assert!(view.contains("seed 7 in 0 moves"), "got:\n{view}");
+    }
+
+    #[test]
+    fn every_help_key_line_fits_the_popup_and_keeps_its_indent() {
+        // A key line that overflows gets wrapped, and the wrapped remainder
+        // lands hard against the left border with the columns broken.
+        for game in games() {
+            for line in help_text(game.as_ref()).lines() {
+                let Some(rest) = line.strip_prefix("  ") else {
+                    continue; // blurb prose, which is meant to wrap
+                };
+                assert!(
+                    !rest.starts_with(' '),
+                    "{}: {line:?} is indented past its key column",
+                    game.name()
+                );
+                assert!(
+                    line.chars().count() <= HELP_INNER_W,
+                    "{}: {line:?} is {} cells, over the {HELP_INNER_W} that fit",
+                    game.name(),
+                    line.chars().count()
+                );
+            }
+        }
     }
 
     #[test]
