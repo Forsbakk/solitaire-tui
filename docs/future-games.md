@@ -1,9 +1,10 @@
 # Future games
 
-The crate plays Klondike and Scorpion, and a variant is now one file in `src/rules/` plus a
-line in `rules::games()`. So the question is no longer "what would it take to support a
-second game" but simply which games are worth adding and what each still needs from the
-shared code. This file is a candidate list, not a commitment. Entries are grouped by cost.
+The crate plays Klondike, Scorpion, Yukon and Russian Solitaire, and a variant is now one
+file in `src/rules/` plus a line in `rules::games()`. So the question is no longer "what
+would it take to support a second game" but simply which games are worth adding and what
+each still needs from the shared code. This file is a candidate list, not a commitment.
+Entries are grouped by cost.
 
 ## What exists to build on
 
@@ -23,6 +24,8 @@ shared code. This file is a candidate list, not a commitment. Entries are groupe
 | Density fallback — Roomy, Tight, elided `⋯N` | `src/ui/layout.rs` | Yes, and every long-pile game wants it |
 | Foundations, stock, waste, draw/recycle, send-home, autoplay | `src/rules/klondike.rs` | As worked examples, not as shared code |
 | Per-game rule options in the menu and on the CLI | `src/rules/mod.rs`, `src/ui/menu.rs` | Yes — declare `OptionSpec`s and read `selected()` |
+| A free-tail lift onto foundations, with no stock at all | `src/rules/yukon.rs` | Yes — `pub(super)` functions, already shared with `russian.rs` |
+| Two games differing by one predicate, in two files | `src/rules/yukon.rs`, `src/rules/russian.rs` | Yes, as the pattern to copy |
 
 What still does not exist: a multi-deck shuffle, `PileKind::FreeCell` and
 `PileKind::Reserve` (deliberately not added until a game needs them), non-row board
@@ -110,36 +113,6 @@ best on-ramp for someone who has never played a patience game in a terminal.
   knows how to present.
 - Verdict: near-free once Spiderette lands.
 
-### Yukon
-
-Scorpion's signature move — lift any face-up card together with everything beneath it,
-in any order — but building is **alternating colour**, and you win by moving all 52 cards
-onto four **foundations** running Ace to King.
-
-*Why it is worth adding.* It shows how much of Scorpion's character comes from the
-free-tail move rather than from the same-suit rule, and it is a genuinely well-regarded
-game in its own right.
-
-**Cost against today's code**
-- Reuses: everything. Klondike already pays for foundations, the top row, `send_home` and
-  `autoplay`; Scorpion already has the free-tail lift.
-- Needs: a deal function, an alternating-colour predicate, and a spec — essentially
-  Klondike's spec minus the stock and waste.
-- Verdict: now one of the cheapest games here, not one of the most expensive. It was
-  Tier 3 work before Klondike existed.
-
-### Russian Solitaire
-
-Yukon with same-suit building instead of alternating colour.
-
-*Why it is worth adding.* It is one predicate away from Yukon and dramatically harder —
-worth listing because once Yukon exists this is close to free.
-
-**Cost against today's code**
-- Reuses: all of Yukon.
-- Needs: the build predicate.
-- Verdict: free companion; ship it alongside Yukon or not at all.
-
 ## Tier 3 — a new pile kind each
 
 ### FreeCell
@@ -155,9 +128,10 @@ fault rather than the deal's. The existing splitmix64 guarantee, that a seed dea
 game permanently, is exactly the property such a number needs.
 
 **Cost against today's code**
-- Reuses: foundations, `send_home`, `autoplay` and the two-row spec from Klondike; the
-  hint ranking is more useful here than anywhere else, since FreeCell positions are
-  analysable.
+- Reuses: foundations, `send_home`, `autoplay` and the two-row spec — from Yukon rather
+  than Klondike, since Yukon is already a foundation game with no stock and its spec is
+  the closer starting point; the hint ranking is more useful here than anywhere else,
+  since FreeCell positions are analysable.
 - Needs: `PileKind::FreeCell` (removed from `board.rs` until a game wants it) plus its own
   `Fan::None` slots, and — if multi-card moves are supported rather than made one card at
   a time — the `(free cells + 1) × (empty piles + 1)` limit in `check`.
@@ -279,11 +253,7 @@ would be most at risk of quietly breaking, and the round-trip tests in `ui/layou
 
 ## A suggested order
 
-**Yukon next.** It went from the most expensive game on this page to one of the cheapest
-the moment Klondike paid for foundations and the top row — it is now a deal function, a
-build predicate and a spec. Russian Solitaire comes free with it.
-
-**Then FreeCell**, for the reason it was always worth having: nothing is face down, so a
+**FreeCell next**, for the reason it was always worth having: nothing is face down, so a
 deal is a pure puzzle and `--seed` becomes a shareable puzzle number rather than just a
 replay. The determinism guarantee in `card.rs` is exactly the property such a number needs.
 Baker's Game and Seahaven follow it almost for free.

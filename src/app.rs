@@ -541,9 +541,13 @@ impl Session {
         let card = self.board.pile(next.from).cards()[next.index];
         let position = suggestions.iter().position(|mv| *mv == next).unwrap_or(0) + 1;
         let count = suggestions.len();
-        self.message = match self.board.pile(next.to).exposed() {
-            Some(target) => format!("hint {position}/{count}: {card} onto {target}"),
-            None => format!("hint {position}/{count}: {card} to an empty pile"),
+        let target = self.board.pile(next.to);
+        self.message = match (target.exposed(), target.kind()) {
+            (Some(card_below), _) => format!("hint {position}/{count}: {card} onto {card_below}"),
+            // An empty foundation is not "an empty pile" in the sense the
+            // player means — saying so would read as an empty column.
+            (None, PileKind::Foundation) => format!("hint {position}/{count}: {card} home"),
+            (None, _) => format!("hint {position}/{count}: {card} to an empty pile"),
         };
         self.tone = Tone::Hint;
     }
@@ -1025,6 +1029,24 @@ mod tests {
         press(&mut session, KeyCode::Char(' '));
         session.drop_on(suggestion.to);
         assert_eq!(session.history.len(), 1, "{}", session.message);
+    }
+
+    #[test]
+    fn a_hint_onto_an_empty_foundation_says_home_not_empty_pile() {
+        // Yukon's opening deal offers an Ace to a bare foundation, and calling
+        // that "an empty pile" reads as an empty column — the one place in the
+        // game an Ace may not go.
+        let mut session = Session::new(Box::new(crate::rules::yukon::Yukon), 42);
+        press(&mut session, KeyCode::Char('H'));
+
+        let target = session.board.pile(session.hint.expect("a hint").to);
+        assert_eq!(target.kind(), PileKind::Foundation);
+        assert!(target.is_empty());
+        assert!(
+            session.message.ends_with(" home"),
+            "got {:?}",
+            session.message
+        );
     }
 
     #[test]

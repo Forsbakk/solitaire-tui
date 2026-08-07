@@ -10,7 +10,7 @@ cargo run --release -- --game scorpion --seed 42      # skip the menu, fixed dea
 cargo run --release -- --game klondike --rule draw=1  # set a game's rules
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 125 tests
+cargo test                          # all 167 tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
@@ -54,7 +54,13 @@ every legal move and sorts by the game's `rank`. Override `activate` (what press
 the stock does), `send_home`, `autoplay`, `is_useful`,
 `options`/`configure`/`selected` only as needed.
 
-`Scorpion` is the minimal example; `Klondike` uses nearly every hook.
+`Scorpion` is the minimal example; `Klondike` uses nearly every hook; `Yukon` is a
+foundation game with no stock, and `Russian` is Yukon with one predicate swapped.
+
+`russian.rs` is the only module that reaches into another game: `yukon.rs` exposes
+its deal, spec, `check`, foundations and heuristic as `pub(super)` functions, and
+`Russian` forwards to them with `Build::SameSuit`. Two games that differ by one
+rule share one implementation; anything more divergent gets its own file.
 
 ### `Action` is universal, and only reversible in exact order
 

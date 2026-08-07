@@ -290,8 +290,12 @@ impl Rules for Klondike {
     fn is_useful(&self, board: &Board, mv: Move) -> bool {
         // Taking a card back off a foundation is legal but never the move to
         // suggest, and sliding a whole pile into an empty one gains nothing.
+        // An empty *foundation* is a different matter: a lone Ace on the first
+        // tableau pile belongs on it, and that move is also index 0 into an
+        // empty pile.
         board.pile(mv.from).kind() != PileKind::Foundation
             && !(mv.index == 0
+                && board.pile(mv.to).kind() == PileKind::Tableau
                 && board.pile(mv.to).is_empty()
                 && board.pile(mv.from).kind() == PileKind::Tableau)
     }

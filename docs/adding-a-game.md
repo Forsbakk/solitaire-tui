@@ -9,6 +9,13 @@ piece of the contract in more detail. For complete examples in the tree,
 `src/rules/scorpion.rs` is the smallest game and `src/rules/klondike.rs` uses
 nearly every hook there is.
 
+Yukon has since shipped, so [`src/rules/yukon.rs`](../src/rules/yukon.rs) is this
+walkthrough as it actually landed — worth reading alongside. It differs in two
+ways, both noted where they come up: its shared half is factored out as
+`pub(super)` functions so [`src/rules/russian.rs`](../src/rules/russian.rs) can
+be Russian Solitaire in forty lines, and its `is_useful` is a little more careful
+than the version below.
+
 ## Contents
 
 - [What you supply, and what you get](#what-you-supply-and-what-you-get)
@@ -251,8 +258,9 @@ highest first. You supply the taste:
 
 ```rust
 fn is_useful(&self, board: &Board, mv: Move) -> bool {
+    let to = board.pile(mv.to);
     board.pile(mv.from).kind() != PileKind::Foundation
-        && !(mv.index == 0 && board.pile(mv.to).is_empty())
+        && !(mv.index == 0 && to.kind() == PileKind::Tableau && to.is_empty())
 }
 
 fn rank(&self, board: &Board, mv: Move) -> i32 {
@@ -269,7 +277,7 @@ fn rank(&self, board: &Board, mv: Move) -> i32 {
     if index == 0 && source.kind() == PileKind::Tableau {
         value += 30;    // empties a pile
     }
-    if board.pile(to).is_empty() {
+    if board.pile(to).kind() == PileKind::Tableau && board.pile(to).is_empty() {
         value -= 25;    // spends a scarce empty pile
     }
     value - (source.len() - index) as i32
@@ -279,6 +287,12 @@ fn rank(&self, board: &Board, mv: Move) -> i32 {
 `is_useful` filters out moves that are legal but pointless, so `H` never offers
 them. Taking a card back off a foundation and sliding a whole pile into an empty
 one are the usual two.
+
+Note the `PileKind::Tableau` in that second clause. Without it, "index 0 into an
+empty pile" also describes sending a lone Ace to a bare foundation — and Yukon's
+first pile is exactly one card, so `H` would refuse to suggest the best opening
+move on the board. Qualify anything you say about *empty* piles with what kind of
+pile you meant.
 
 ### 8. Status, text, and registering
 
@@ -307,6 +321,9 @@ pub fn games() -> Vec<Box<dyn Rules>> {
     ]
 }
 ```
+
+`games()` fixes the order the menu lists them in, so put a new game where you want
+a player to meet it, not necessarily last.
 
 That is the whole job. The menu lists it, `--game yukon` plays it, `?` shows its
 help, and the generic tests in `rules/mod.rs` start covering it immediately.
@@ -553,6 +570,30 @@ impl Rules for Klondike {
 
 `rules::set_option` drives `configure` by name for `--rule`, so you never parse
 strings yourself.
+
+## A second game that is nearly the first
+
+Several variants differ from an existing game by a single predicate. You have two
+ways to ship one, and they are not equivalent:
+
+- **A rule option**, if the two are settings of one game — Klondike's draw of one
+  and draw of three.
+- **A second file**, if the two have their own names and their own reputations.
+  Russian Solitaire is Yukon built in suit; a player looking for it will look for
+  it in the menu, not under a flag on something else.
+
+For the second, put the shared half in the first game's module as `pub(super)`
+functions and let the new file supply only what differs.
+`src/rules/russian.rs` is the whole pattern: a `//!` header, a struct, its own
+`name`/`blurb`, and a `Rules` impl whose methods forward to `yukon::…` — with
+`check` passing `Build::SameSuit` where Yukon passes `Build::AlternatingColour`.
+
+Keep the divergence to one named type. An `enum` with a method that both games
+call, rather than a `bool` threaded through several functions, is what stops the
+second game slowly acquiring a second copy of the first one's rules.
+
+Its tests should cover only what differs — the build rule, and an assertion that
+the deals really are identical — and lean on the first game's suite for the rest.
 
 ## Testing a new game
 

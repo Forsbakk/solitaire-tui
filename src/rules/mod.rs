@@ -9,7 +9,9 @@
 //! game that does not need to think harder than that.
 
 pub mod klondike;
+pub mod russian;
 pub mod scorpion;
+pub mod yukon;
 
 use crate::board::{Action, Board, BoardSpec, Move, MoveError, PileId};
 
@@ -164,6 +166,8 @@ pub fn games() -> Vec<Box<dyn Rules>> {
     vec![
         Box::new(klondike::Klondike::default()),
         Box::new(scorpion::Scorpion),
+        Box::new(yukon::Yukon),
+        Box::new(russian::Russian),
     ]
 }
 

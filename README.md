@@ -1,14 +1,15 @@
 # solitaire
 
-Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Two games so
-far — Klondike and Scorpion — chosen from a menu at startup.
+Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Four games so
+far — Klondike, Scorpion, Yukon and Russian Solitaire — chosen from a menu at
+startup.
 
 ```
 ╭ Games ─────────────╮╭ Klondike ────────────────────────────────────────╮
 │ ▸ Klondike         ││ Build the tableau down in alternating colour,    │
 │   Scorpion         ││ moving ordered runs as a unit. Only a King may   │
-│                    ││ take an empty pile.                              │
-│                    ││                                                  │
+│   Yukon            ││ take an empty pile.                              │
+│   Russian          ││                                                  │
 │                    ││ Turn the stock for more cards, and build the     │
 │                    ││ four foundations up in suit from the Ace. Win by │
 │                    ││ sending all 52 cards home.                       │
@@ -49,7 +50,7 @@ beside it, and the four foundations waiting:
 
 ```sh
 cargo run --release                                   # pick a game from the menu
-cargo run --release -- --game klondike                # skip the menu
+cargo run --release -- --game yukon                   # skip the menu
 cargo run --release -- --game klondike --rule draw=1  # and set its rules
 cargo run --release -- --seed 42                      # a specific deal, repeatable
 cargo run --release -- --list                         # what can be played
@@ -106,6 +107,33 @@ down; the rest are face up. Three cards are held back as the stock.
 Not every deal is winnable. `u` undoes as far back as you like, and `r` deals the
 same cards again from the start.
 
+### Yukon
+
+Scorpion's lift played onto Klondike's foundations. Seven piles holding 1, 6, 7,
+8, 9, 10 and 11 cards, with five face up on each and the rest buried — pile *n*
+hides *n* cards. There is **no stock**: every card is on the table from the
+first move.
+
+* Pick up any **face-up card together with every card below it**, in any order —
+  the tail does not have to be a run, which is what separates this from
+  Klondike.
+* Drop it on the **opposite colour, one rank higher** — a red 9 onto a black 10.
+* Only a **King** may move to an empty pile.
+* A face-down card left exposed by a move turns face up.
+* The four **foundations** build up in suit from the Ace. `f` sends a card home,
+  and a card may be taken back off a foundation when you need it. `A` plays out
+  the rest once nothing is face down.
+* Win by sending all 52 cards home.
+
+### Russian Solitaire
+
+Yukon in every respect but one: build on the **same suit** rather than the
+opposite colour. The deal, the free-tail lift, the foundations and the empty-pile
+rule are all Yukon's.
+
+That one word takes most of your legal moves away, so expect to lose far more
+often than you win — which is the point of the game.
+
 ## Keys
 
 | Key | |
@@ -115,9 +143,9 @@ same cards again from the start.
 | `1`…`9` | jump to a tableau pile, or drop a held card there |
 | `space` `enter` | pick up the card under the cursor, or drop what you hold |
 | `esc` | put a held card back |
-| `d` | turn or deal the stock |
-| `f` | send a card to its foundation — the one held, or under the cursor (Klondike) |
-| `A` | play out a decided game (Klondike) |
+| `d` | turn or deal the stock (Klondike, Scorpion) |
+| `f` | send a card to its foundation — the one held, or under the cursor (Klondike, Yukon, Russian) |
+| `A` | play out a decided game (Klondike, Yukon, Russian) |
 | `H` | suggest a move; press again for the next one |
 | `u` / `ctrl-r` | undo / redo |
 | `n` / `r` | new game / replay this deal |
@@ -154,11 +182,12 @@ should land on. Accepting it is then just `space` and the target pile. Press `H`
 again to cycle through the alternatives, best first — the count in the status
 line (`hint 2/5`) tells you how many there are.
 
-The ranking is a heuristic, not a solver. Each game supplies its own: both prefer
-moves that turn a card face up, Klondike then favours sending cards home and
-clearing the waste, and neither will offer the legal-but-useless move of sliding
-a whole pile into an empty one. Neither game can be played perfectly without
-searching, so a hint is a reasonable move rather than a winning one.
+The ranking is a heuristic, not a solver. Each game supplies its own: they all
+prefer moves that turn a card face up, the foundation games then favour sending
+cards home, Klondike also favours clearing the waste, and none of them will offer
+the legal-but-useless move of sliding a whole pile into an empty one. No game
+here can be played perfectly without searching, so a hint is a reasonable move
+rather than a winning one.
 
 ## Layout on small terminals
 
@@ -187,7 +216,8 @@ drives the cursor, selection and undo for whatever game it is handed.
 
 [`docs/adding-a-game.md`](docs/adding-a-game.md) is the full guide — a
 walkthrough building Yukon from nothing, the trait method by method, and what to
-test. Variants that could come next, and what each would cost, are sketched in
+test; `src/rules/yukon.rs` is that walkthrough as it actually shipped. Variants
+that could come next, and what each would cost, are sketched in
 [`docs/future-games.md`](docs/future-games.md).
 
 ## Development
