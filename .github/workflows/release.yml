@@ -6,6 +6,10 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # A manual run is a rehearsal: it builds and packages all five targets but
+  # uploads nothing, so a broken matrix entry is found without spending a
+  # version number. The action reads GITHUB_REF for the tag name and would
+  # choke on refs/heads/main, hence the placeholder ref below.
   workflow_dispatch:
 
 permissions:
@@ -42,4 +46,6 @@ jobs:
           archive: $bin-$tag-$target
           include: README.md,LICENSE-MIT,LICENSE-APACHE
           checksum: sha256
+          dry-run: ${{ github.event_name == 'workflow_dispatch' }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/tags/v0.0.0-rehearsal' || '' }}
           token: ${{ secrets.GITHUB_TOKEN }}
