@@ -6,9 +6,10 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget, Wrap};
 
-use super::layout::{BoardLayout, CARD_W, Density};
+use super::layout::{BoardLayout, CARD_W, Density, PileLayout};
+use crate::board::{Board, Fan, PileId, PileKind};
 use crate::card::Card;
-use crate::game::{Column, Game};
+use crate::rules::{Rules, StatusTone};
 
 const BORDER: Color = Color::DarkGray;
 const CURSOR: Color = Color::Cyan;
@@ -19,6 +20,26 @@ const MUTED: Color = Color::DarkGray;
 
 const BACK_FACE: &str = "▞▞▞▞";
 const CARET: &str = "▶";
+/// Shown on an empty stock that can still be refilled from the waste.
+const RECYCLE: &str = " ↻  ";
+
+/// Keys that mean the same thing in every game. A game's own `help` adds to
+/// this rather than repeating it.
+const SHARED_HELP: &str = "\
+  ← →  h l      move between piles
+  ↑ ↓  k j      move up and down a pile
+  1 … 9         jump to a tableau pile, or drop there
+  space enter   pick up the card under the cursor, or drop
+  esc           put a held card back";
+
+const SHARED_HELP_TAIL: &str = "\
+  H             suggest a move; press again for the next one
+  u  ctrl-r     undo / redo
+  n  r          new game / replay this deal
+  m             back to the menu
+  click         pick up a card, then click a pile
+  ?             close this help
+  q             quit";
 
 /// The four rows a card box can need. Highlighted cards switch to a heavier
 /// line so they stand out even where colour is washed out or absent.
@@ -93,39 +114,39 @@ impl Accent {
 /// What the player is pointing at, holding, and being pointed towards.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Focus {
-    pub column: usize,
-    /// `None` when the focused column is empty.
+    pub pile: PileId,
+    /// `None` when the focused pile is empty.
     pub card: Option<usize>,
-    /// The held tail, as `(column, first card)`.
-    pub selection: Option<(usize, usize)>,
-    /// The card the active hint points at, as `(column, card)`.
-    pub hint_target: Option<(usize, usize)>,
+    /// The held tail, as `(pile, first card)`.
+    pub selection: Option<(PileId, usize)>,
+    /// The card the active hint points at, as `(pile, card)`.
+    pub hint_target: Option<(PileId, usize)>,
 }
 
 impl Focus {
-    /// The card each column must keep visible when it has to be elided.
-    pub fn pins(&self) -> [Option<usize>; crate::game::COLUMNS] {
-        let mut pins = [None; crate::game::COLUMNS];
+    /// The card each pile must keep visible when it has to be elided.
+    pub fn pins(&self, piles: usize) -> Vec<Option<usize>> {
+        let mut pins = vec![None; piles];
         if let Some(card) = self.card {
-            pins[self.column] = Some(card);
+            pins[self.pile] = Some(card);
         }
-        if let Some((column, index)) = self.selection {
-            pins[column] = Some(index);
+        if let Some((pile, index)) = self.selection {
+            pins[pile] = Some(index);
         }
         pins
     }
 
-    fn accent(&self, column: usize, index: usize) -> Accent {
-        if let Some((selected_column, first)) = self.selection
-            && column == selected_column
+    fn accent(&self, pile: PileId, index: usize) -> Accent {
+        if let Some((selected_pile, first)) = self.selection
+            && pile == selected_pile
             && index >= first
         {
             return Accent::Selected;
         }
-        if self.column == column && self.card == Some(index) {
+        if self.pile == pile && self.card == Some(index) {
             return Accent::Cursor;
         }
-        if self.hint_target == Some((column, index)) {
+        if self.hint_target == Some((pile, index)) {
             return Accent::Target;
         }
         Accent::Plain
@@ -140,25 +161,42 @@ fn put(buffer: &mut Buffer, x: u16, y: u16, text: &str, style: Style) {
     }
 }
 
-pub fn draw_board(buffer: &mut Buffer, layout: &BoardLayout, game: &Game, focus: &Focus) {
-    for (index, column_layout) in layout.columns.iter().enumerate() {
-        draw_column(
-            buffer,
-            column_layout,
-            game.column(index),
-            index,
-            focus,
-            layout.density,
-        );
+pub fn draw_board(
+    buffer: &mut Buffer,
+    layout: &BoardLayout,
+    board: &Board,
+    rules: &dyn Rules,
+    focus: &Focus,
+) {
+    for pile_layout in &layout.piles {
+        match pile_layout.fan {
+            Fan::Down => draw_fanned(buffer, pile_layout, board, focus, layout.density),
+            Fan::None => draw_flat(buffer, pile_layout, board, rules, focus),
+        }
     }
 }
 
-/// Numbered labels above the board, with the cursor's column called out. These
-/// double as the `1`-`7` shortcuts, so the player can see where those jump to.
-pub fn draw_column_labels(buffer: &mut Buffer, layout: &BoardLayout, y: u16, active: usize) {
-    for (index, column) in layout.columns.iter().enumerate() {
+/// Numbered labels directly above the tableau, with the cursor's pile called
+/// out. These double as the digit shortcuts, so the player can see where those
+/// jump to — which only works if they sit over the piles they number, not over
+/// whichever row happens to be at the top of the board.
+pub fn draw_labels(buffer: &mut Buffer, layout: &BoardLayout, tableau: &[PileId], active: PileId) {
+    // The row above the tableau: the board's own margin when the tableau is the
+    // top row, and the gap between rows otherwise.
+    let Some(y) = tableau
+        .first()
+        .and_then(|&pile| layout.pile(pile))
+        .and_then(|pile| pile.top.checked_sub(1))
+    else {
+        return;
+    };
+
+    for (index, &pile) in tableau.iter().enumerate() {
+        let Some(pile_layout) = layout.pile(pile) else {
+            continue;
+        };
         let number = index + 1;
-        let (label, style) = if index == active {
+        let (label, style) = if pile == active {
             (
                 format!("[{number}]"),
                 Style::new().fg(CURSOR).add_modifier(Modifier::BOLD),
@@ -166,50 +204,102 @@ pub fn draw_column_labels(buffer: &mut Buffer, layout: &BoardLayout, y: u16, act
         } else {
             (number.to_string(), Style::new().fg(MUTED))
         };
-        put(buffer, column.x, y, &format!("{label:^6}"), style);
+        put(buffer, pile_layout.x, y, &format!("{label:^6}"), style);
     }
 }
 
-fn draw_column(
-    buffer: &mut Buffer,
-    layout: &super::layout::ColumnLayout,
-    column: &Column,
-    index: usize,
-    focus: &Focus,
-    density: Density,
-) {
-    let x = layout.x;
+/// An empty pile, which is still a place the cursor can sit and cards can land.
+fn draw_empty(buffer: &mut Buffer, x: u16, top: u16, accent: Accent, marker: Option<&str>) {
+    let frame = accent.frame();
+    let style = accent.style();
+    put(buffer, x, top, frame.first, style);
+    put(buffer, x, top + 1, frame.side, style);
+    put(buffer, x + CARD_W - 1, top + 1, frame.side, style);
+    put(buffer, x, top + 2, frame.last, style);
+    if let Some(marker) = marker {
+        put(buffer, x + 1, top + 1, marker, Style::new().fg(MUTED));
+    }
+    if accent == Accent::Cursor {
+        draw_caret(buffer, x, top + 1);
+    }
+}
 
-    if column.is_empty() {
-        // An empty column is still a drop target, so the cursor and a hint
-        // pointing at it both need to show.
-        let accent = if focus.column == index {
+/// A pile that shows only its exposed card: stock, waste, a foundation.
+fn draw_flat(
+    buffer: &mut Buffer,
+    layout: &PileLayout,
+    board: &Board,
+    rules: &dyn Rules,
+    focus: &Focus,
+) {
+    let pile = board.pile(layout.pile);
+    let Some(slot) = layout.slots.first() else {
+        // An empty stock that can be refilled says so, rather than looking
+        // like a pile that has simply run out.
+        let refillable =
+            pile.kind() == PileKind::Stock && rules.activate(board, layout.pile).is_some();
+        let accent = if focus.pile == layout.pile {
             Accent::Cursor
-        } else if focus.hint_target.is_some_and(|(c, _)| c == index) {
+        } else if focus.hint_target.is_some_and(|(p, _)| p == layout.pile) {
             Accent::Target
         } else {
             Accent::Plain
         };
-        let frame = accent.frame();
-        let style = accent.style();
-        put(buffer, x, layout.top, frame.first, style);
-        put(buffer, x, layout.top + 1, frame.side, style);
-        put(buffer, x + CARD_W - 1, layout.top + 1, frame.side, style);
-        put(buffer, x, layout.top + 2, frame.last, style);
-        if accent == Accent::Cursor {
-            draw_caret(buffer, x, layout.top + 1);
-        }
+        draw_empty(
+            buffer,
+            layout.x,
+            layout.top,
+            accent,
+            refillable.then_some(RECYCLE),
+        );
+        return;
+    };
+
+    let accent = focus.accent(layout.pile, slot.index);
+    let frame = accent.frame();
+    let style = accent.style();
+    put(buffer, layout.x, layout.top, frame.first, style);
+    draw_face(
+        buffer,
+        layout.x,
+        layout.top + 1,
+        pile.is_face_up(slot.index)
+            .then(|| pile.cards()[slot.index]),
+        accent,
+    );
+    put(buffer, layout.x, layout.top + 2, frame.last, style);
+}
+
+fn draw_fanned(
+    buffer: &mut Buffer,
+    layout: &PileLayout,
+    board: &Board,
+    focus: &Focus,
+    density: Density,
+) {
+    let pile = board.pile(layout.pile);
+    let x = layout.x;
+
+    if pile.is_empty() {
+        // An empty pile is still a drop target, so the cursor and a hint
+        // pointing at it both need to show.
+        let accent = if focus.pile == layout.pile {
+            Accent::Cursor
+        } else if focus.hint_target.is_some_and(|(p, _)| p == layout.pile) {
+            Accent::Target
+        } else {
+            Accent::Plain
+        };
+        draw_empty(buffer, x, layout.top, accent, None);
         return;
     }
 
     let face = |card_index: usize| -> Option<Card> {
-        column
-            .is_face_up(card_index)
-            .then(|| column.cards()[card_index])
+        pile.is_face_up(card_index)
+            .then(|| pile.cards()[card_index])
     };
-    let is_last = |card_index: usize| card_index + 1 == column.len();
-
-    let accent_of = |position: usize| focus.accent(index, layout.slots[position].index);
+    let is_last = |card_index: usize| card_index + 1 == pile.len();
+    let accent_of = |position: usize| focus.accent(layout.pile, layout.slots[position].index);
 
     match density {
         // Cards overlap, so each border row is shared: it closes the card above
@@ -231,7 +321,7 @@ fn draw_column(
         Density::Tight => {
             draw_junction(buffer, x, layout.top, None, Some(accent_of(0)));
             for slot in &layout.slots {
-                let accent = focus.accent(index, slot.index);
+                let accent = focus.accent(layout.pile, slot.index);
                 draw_face(buffer, x, slot.top, face(slot.index), accent);
                 if is_last(slot.index) {
                     draw_junction(buffer, x, slot.top + 1, Some(accent), None);
@@ -255,7 +345,7 @@ fn draw_column(
 
 /// A border row shared by the card above it and the card below it.
 ///
-/// `None` means there is no card on that side — the top or bottom of a column.
+/// `None` means there is no card on that side — the top or bottom of a pile.
 /// When the two disagree, the stronger accent claims the row and draws its own
 /// edge there: a highlighted card closes itself rather than letting its plain
 /// neighbour open over the top of it.
@@ -326,7 +416,8 @@ pub enum Tone {
 pub fn draw_status(
     buffer: &mut Buffer,
     area: Rect,
-    game: &Game,
+    board: &Board,
+    rules: &dyn Rules,
     focus: &Focus,
     message: &str,
     tone: Tone,
@@ -335,28 +426,34 @@ pub fn draw_status(
         return;
     }
 
-    let stock = match game.stock_len() {
-        0 => Span::styled("dealt", Style::new().fg(MUTED)),
-        n => Span::styled("●".repeat(n), Style::new().fg(Color::Green)),
-    };
-    let left = Line::from(vec![
+    let mut spans = vec![
         Span::styled("seed ", Style::new().fg(MUTED)),
-        Span::raw(game.seed().to_string()),
+        Span::raw(board.seed().to_string()),
         Span::styled("  moves ", Style::new().fg(MUTED)),
-        Span::raw(game.moves().to_string()),
-        Span::styled("  stock ", Style::new().fg(MUTED)),
-        stock,
-    ]);
-    let right = Line::from(Span::styled(
-        "H hint   ? help   q quit",
-        Style::new().fg(MUTED),
-    ));
+        Span::raw(board.moves().to_string()),
+    ];
+    for item in rules.status(board) {
+        spans.push(Span::styled(
+            format!("  {} ", item.label),
+            Style::new().fg(MUTED),
+        ));
+        spans.push(Span::styled(
+            item.value,
+            match item.tone {
+                StatusTone::Good => Style::new().fg(Color::Green),
+                StatusTone::Muted => Style::new().fg(MUTED),
+            },
+        ));
+    }
 
     let top = Rect { height: 1, ..area };
-    Paragraph::new(left).render(top, buffer);
-    Paragraph::new(right)
-        .alignment(Alignment::Right)
-        .render(top, buffer);
+    Paragraph::new(Line::from(spans)).render(top, buffer);
+    Paragraph::new(Line::from(Span::styled(
+        "H hint   ? help   q quit",
+        Style::new().fg(MUTED),
+    )))
+    .alignment(Alignment::Right)
+    .render(top, buffer);
 
     if area.height < 2 {
         return;
@@ -367,18 +464,18 @@ pub fn draw_status(
             Tone::Hint => HINT,
         };
         Span::styled(message, Style::new().fg(color))
-    } else if let Some((column, index)) = focus.selection {
-        let held = game.column(column).len() - index;
+    } else if let Some((pile, index)) = focus.selection {
+        let held = board.pile(pile).len() - index;
         Span::styled(
             format!(
-                "holding {held} card{} — choose a column to drop on (esc to cancel)",
+                "holding {held} card{} — choose a pile to drop on (esc to cancel)",
                 if held == 1 { "" } else { "s" }
             ),
             Style::new().fg(SELECTED),
         )
     } else {
         Span::styled(
-            "space picks up a card and everything below it",
+            "space picks up a card, then choose where to drop it",
             Style::new().fg(MUTED),
         )
     };
@@ -392,13 +489,10 @@ pub fn draw_status(
     );
 }
 
-pub fn draw_too_small(buffer: &mut Buffer, area: Rect) {
+pub fn draw_too_small(buffer: &mut Buffer, area: Rect, need_w: u16, need_h: u16) {
     let text = format!(
         "Terminal too small.\n\nNeed at least {}x{}, have {}x{}.",
-        super::layout::BOARD_W,
-        super::layout::MIN_BOARD_H + 2,
-        area.width,
-        area.height
+        need_w, need_h, area.width, area.height
     );
     Paragraph::new(text)
         .alignment(Alignment::Center)
@@ -406,7 +500,7 @@ pub fn draw_too_small(buffer: &mut Buffer, area: Rect) {
         .render(area, buffer);
 }
 
-pub fn draw_win(buffer: &mut Buffer, area: Rect, game: &Game) {
+pub fn draw_win(buffer: &mut Buffer, area: Rect, board: &Board, rules: &dyn Rules) {
     let popup = centered(44, 7, area);
     Clear.render(popup, buffer);
 
@@ -416,16 +510,16 @@ pub fn draw_win(buffer: &mut Buffer, area: Rect, game: &Game) {
         .padding(Padding::uniform(1));
     let text = vec![
         Line::from(Span::styled(
-            "All four suits, King to Ace. You win!",
+            format!("{} solved. You win!", rules.name()),
             Style::new().fg(Color::Green).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            format!("seed {} in {} moves", game.seed(), game.moves()),
+            format!("seed {} in {} moves", board.seed(), board.moves()),
             Style::new().fg(MUTED),
         )),
         Line::from(Span::styled(
-            "n new game   r replay this deal   q quit",
+            "n new game   r replay this deal   m menu   q quit",
             Style::new().fg(MUTED),
         )),
     ];
@@ -435,40 +529,45 @@ pub fn draw_win(buffer: &mut Buffer, area: Rect, game: &Game) {
         .render(popup, buffer);
 }
 
-const HELP: &str = "\
-Move any face-up card, together with every card below it,
-onto a card of the same suit and one rank higher. The
-cards you carry do not need to be in order. Only a King
-may move to an empty column. Win by building all four
-suits from King down to Ace.
+/// The full help text for `rules`: its own rules and keys, wrapped in the ones
+/// every game shares.
+pub fn help_text(rules: &dyn Rules) -> String {
+    let mut text = String::new();
+    for line in rules.blurb().lines() {
+        text.push_str(line);
+        text.push('\n');
+    }
+    text.push('\n');
+    text.push_str(SHARED_HELP);
+    text.push('\n');
+    let own = rules.help();
+    if !own.is_empty() {
+        text.push_str(own);
+        text.push('\n');
+    }
+    text.push_str(SHARED_HELP_TAIL);
+    text
+}
 
-  ← →  h l      move between columns
-  ↑ ↓  k j      move up and down a column
-  1 … 7         jump to a column, or drop a held tail there
-  space enter   pick up the card under the cursor, or drop
-  esc           put a held tail back
-  d             deal the three stock cards (once per game)
-  H             suggest a move; press again for the next one
-  u  ctrl-r     undo / redo
-  n  r          new game / replay this deal
-  click         pick up a card, then click a column
-  ?             close this help
-  q             quit";
-
-pub fn draw_help(buffer: &mut Buffer, area: Rect) {
-    let popup = centered(62, 23, area);
+pub fn draw_help(buffer: &mut Buffer, area: Rect, rules: &dyn Rules) {
+    let text = help_text(rules);
+    let lines = text.lines().count() as u16;
+    let popup = centered(64, lines + 2, area);
     Clear.render(popup, buffer);
 
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(Style::new().fg(CURSOR))
-        .title(" Scorpion Solitaire ")
+        .title(format!(" {} ", rules.name()))
         .padding(Padding::symmetric(1, 0));
-    Paragraph::new(HELP).block(block).render(popup, buffer);
+    Paragraph::new(text)
+        .wrap(Wrap { trim: false })
+        .block(block)
+        .render(popup, buffer);
 }
 
 /// A `width` × `height` rect centred in `area`, clamped to fit.
-fn centered(width: u16, height: u16, area: Rect) -> Rect {
+pub fn centered(width: u16, height: u16, area: Rect) -> Rect {
     let width = width.min(area.width);
     let height = height.min(area.height);
     Rect {
@@ -482,6 +581,8 @@ fn centered(width: u16, height: u16, area: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rules::games;
+    use crate::rules::scorpion::Scorpion;
 
     fn text(buffer: &Buffer) -> String {
         (0..buffer.area.height)
@@ -495,14 +596,27 @@ mod tests {
     }
 
     #[test]
-    fn the_win_banner_names_the_deal() {
+    fn the_win_banner_names_the_game_and_the_deal() {
         let area = Rect::new(0, 0, 80, 24);
         let mut buffer = Buffer::empty(area);
-        draw_win(&mut buffer, area, &Game::new(7));
+        draw_win(&mut buffer, area, &Scorpion.deal(7), &Scorpion);
 
         let view = text(&buffer);
         assert!(view.contains("You win!"), "got:\n{view}");
+        assert!(view.contains("Scorpion"), "got:\n{view}");
         assert!(view.contains("seed 7 in 0 moves"), "got:\n{view}");
+    }
+
+    #[test]
+    fn help_carries_the_shared_keys_and_the_games_own() {
+        for game in games() {
+            let text = help_text(game.as_ref());
+            assert!(text.contains("undo / redo"), "{}", game.name());
+            assert!(text.contains("back to the menu"), "{}", game.name());
+            for line in game.help().lines() {
+                assert!(text.contains(line), "{} lost {line:?}", game.name());
+            }
+        }
     }
 
     #[test]
@@ -510,9 +624,9 @@ mod tests {
         for (width, height) in [(80, 24), (48, 8), (20, 4), (1, 1)] {
             let area = Rect::new(0, 0, width, height);
             let mut buffer = Buffer::empty(area);
-            draw_help(&mut buffer, area);
-            draw_win(&mut buffer, area, &Game::new(1));
-            draw_too_small(&mut buffer, area);
+            draw_help(&mut buffer, area, &Scorpion);
+            draw_win(&mut buffer, area, &Scorpion.deal(1), &Scorpion);
+            draw_too_small(&mut buffer, area, 48, 8);
         }
     }
 }
