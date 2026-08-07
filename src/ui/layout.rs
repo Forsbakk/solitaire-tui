@@ -23,6 +23,17 @@ pub const CARD_GAP: u16 = 1;
 pub const CARD_H: u16 = 3;
 /// Blank rows between board rows.
 pub const ROW_GAP: u16 = 1;
+/// Columns between the left edges of cards fanned rightwards.
+///
+/// Four, so a covered card keeps three cells — its whole face bar the trailing
+/// space, which is what a ten needs to show its suit as well as its rank. Three
+/// would leave a ten reading as bare `10`.
+///
+/// The cost is that a three-card fan is 14 cells wide, and a row cannot fit a
+/// card, a gap, that fan, a gap and four more cards into the 48 columns seven
+/// slots give it. Klondike's waste therefore sits flush against its first
+/// foundation rather than a column clear of it.
+pub const SPREAD_STEP: u16 = 4;
 /// Below this a fanned row can no longer show a card, a marker and borders.
 pub const MIN_FAN_H: u16 = 6;
 
@@ -60,8 +71,15 @@ pub struct PileLayout {
     pub fan: Fan,
     pub x: u16,
     pub top: u16,
-    /// Visible cards, in board order. Elided cards have no slot.
+    /// How wide this pile answers for. Wider than a card only when it fans
+    /// rightwards.
+    pub width: u16,
+    /// Cards the player can address, in board order. Elided cards have no slot,
+    /// and a rightward fan gives a slot only to its exposed card.
     pub slots: Vec<Slot>,
+    /// Cards drawn side by side as `(card index, x)`, exposed card last. Empty
+    /// for a pile with no cards; one entry for a pile that shows only its top.
+    pub spread: Vec<(usize, u16)>,
     /// `(hidden card count, marker row)` when the pile did not fit.
     pub elision: Option<(usize, u16)>,
     pub height: u16,
@@ -94,7 +112,7 @@ impl BoardLayout {
             return None;
         }
         let found = self.piles.iter().find(|pile| {
-            x >= pile.x && x < pile.x + CARD_W && y >= pile.top && y < pile.claim_bottom
+            x >= pile.x && x < pile.x + pile.width && y >= pile.top && y < pile.claim_bottom
         })?;
         let card = found
             .slots
@@ -112,12 +130,27 @@ impl BoardLayout {
     }
 }
 
-/// How wide `spec`'s widest row is, in cells.
-pub fn board_width(spec: &BoardSpec) -> u16 {
-    match spec.width() {
-        0 => 0,
-        slots => slots * CARD_W + (slots - 1) * CARD_GAP,
+/// How many cells a pile drawn with `fan` needs.
+pub const fn fan_width(fan: Fan) -> u16 {
+    match fan {
+        Fan::Right(shown) if shown > 1 => (shown as u16 - 1) * SPREAD_STEP + CARD_W,
+        _ => CARD_W,
     }
+}
+
+/// How wide `spec`'s widest row is, in cells.
+///
+/// Measured from each spot's own left edge rather than from the slot count, so
+/// a pile that fans rightwards into the gap beside it costs nothing extra.
+pub fn board_width(spec: &BoardSpec) -> u16 {
+    (0..spec.rows())
+        .filter_map(|row| {
+            spec.row(row)
+                .map(|spot| spot.slot * (CARD_W + CARD_GAP) + fan_width(spot.fan))
+                .max()
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// The least height `spec` can be drawn in.
@@ -215,7 +248,8 @@ pub fn compute(
                     density,
                     pins[spot.pile],
                 ),
-                Fan::None => flat_layout(spot.pile, lengths[spot.pile], x, y),
+                Fan::None => spread_layout(spot.pile, lengths[spot.pile], 1, x, y),
+                Fan::Right(shown) => spread_layout(spot.pile, lengths[spot.pile], shown, x, y),
             };
             // A fanned pile answers for every row beneath it, so a click below
             // a short pile still lands on it.
@@ -236,16 +270,29 @@ pub fn compute(
     })
 }
 
-/// A pile that shows only its exposed card: stock, waste, a foundation.
+/// A pile drawn as a row: its exposed card, optionally with the `show - 1`
+/// cards beneath it peeking out to the left of it.
 ///
-/// The one slot carries the *exposed* card's index rather than zero, so a click
-/// on it picks up the card the player can actually see.
-fn flat_layout(pile: PileId, len: usize, x: u16, top: u16) -> PileLayout {
+/// Only the exposed card gets a slot, so it is the only one a click can name —
+/// the rest are there to be read, not taken. Its slot carries the *exposed*
+/// index rather than zero, so picking up the waste picks up the card the player
+/// can actually see.
+fn spread_layout(pile: PileId, len: usize, show: usize, x: u16, top: u16) -> PileLayout {
+    let show = show.max(1).min(len);
+    let spread: Vec<(usize, u16)> = (0..show)
+        .map(|i| (len - show + i, x + i as u16 * SPREAD_STEP))
+        .collect();
+
     PileLayout {
         pile,
-        fan: Fan::None,
+        fan: if show > 1 {
+            Fan::Right(show)
+        } else {
+            Fan::None
+        },
         x,
         top,
+        width: spread.last().map_or(CARD_W, |&(_, last)| last - x + CARD_W),
         slots: match len.checked_sub(1) {
             Some(index) => vec![Slot {
                 index,
@@ -254,6 +301,7 @@ fn flat_layout(pile: PileId, len: usize, x: u16, top: u16) -> PileLayout {
             }],
             None => Vec::new(),
         },
+        spread,
         elision: None,
         height: CARD_H,
         claim_bottom: top + CARD_H,
@@ -274,7 +322,9 @@ fn fanned_layout(
         fan: Fan::Down,
         x,
         top,
+        width: CARD_W,
         slots: Vec::new(),
+        spread: Vec::new(),
         elision: None,
         height: CARD_H,
         claim_bottom: top + CARD_H,
@@ -648,6 +698,85 @@ mod tests {
             layout.hit(foundation.x, CARD_H).is_none(),
             "a flat pile answers only for its own three rows"
         );
+    }
+
+    #[test]
+    fn a_rightward_fan_draws_several_cards_but_offers_only_the_exposed_one() {
+        let spec = BoardSpec::new(vec![Spot::new(0, 0, 0, Fan::Right(3))]);
+        let layout = compute(&spec, &[8], area(80, 12), &[None]).unwrap();
+        let pile = &layout.piles[0];
+
+        assert_eq!(
+            pile.spread,
+            vec![
+                (5, pile.x),
+                (6, pile.x + SPREAD_STEP),
+                (7, pile.x + 2 * SPREAD_STEP)
+            ],
+            "the last three cards, left to right"
+        );
+        assert_eq!(pile.slots.len(), 1, "only one card is addressable");
+        assert_eq!(pile.slots[0].index, 7, "and it is the exposed one");
+        assert_eq!(pile.width, 2 * SPREAD_STEP + CARD_W);
+        assert_eq!(pile.height, CARD_H, "a fanned row is still one card tall");
+    }
+
+    #[test]
+    fn every_cell_of_a_rightward_fan_resolves_to_the_card_in_play() {
+        let spec = BoardSpec::new(vec![Spot::new(0, 0, 0, Fan::Right(3))]);
+        let layout = compute(&spec, &[8], area(80, 12), &[None]).unwrap();
+        let pile = &layout.piles[0];
+
+        for x in pile.x..pile.x + pile.width {
+            let hit = layout.hit(x, pile.top + 1).expect("inside the fan");
+            assert_eq!(hit.pile, 0);
+            assert_eq!(
+                hit.card,
+                Some(7),
+                "clicking a covered card at {x} must offer the exposed one"
+            );
+        }
+        assert!(
+            layout.hit(pile.x + pile.width, pile.top + 1).is_none(),
+            "and the fan claims no more than its own width"
+        );
+    }
+
+    #[test]
+    fn a_short_fan_is_no_wider_than_a_single_card() {
+        let spec = BoardSpec::new(vec![Spot::new(0, 0, 0, Fan::Right(3))]);
+        // Two cards held, three slots asked for: it shows what it has.
+        let layout = compute(&spec, &[1], area(80, 12), &[None]).unwrap();
+        assert_eq!(layout.piles[0].spread, vec![(0, layout.piles[0].x)]);
+        assert_eq!(layout.piles[0].width, CARD_W);
+        assert_eq!(layout.piles[0].fan, Fan::None, "nothing left to fan");
+    }
+
+    #[test]
+    fn a_fan_reaching_into_the_next_slot_costs_no_width_and_overlaps_nothing() {
+        // Klondike's shape: a three-card fan in slot 1 spreading across the gap
+        // at slot 2, with foundations from slot 3. The board stays 7 slots wide.
+        let mut spots = vec![
+            Spot::new(0, 0, 0, Fan::None),
+            Spot::new(1, 0, 1, Fan::Right(3)),
+        ];
+        spots.extend((0..4).map(|i| Spot::new(2 + i, 0, 3 + i as u16, Fan::None)));
+        spots.extend((0..7).map(|i| Spot::new(6 + i, 1, i as u16, Fan::Down)));
+        let spec = BoardSpec::new(spots);
+
+        assert_eq!(board_width(&spec), 7 * CARD_W + 6 * CARD_GAP);
+
+        let lengths = vec![5; 13];
+        let layout = compute(&spec, &lengths, area(80, 30), &vec![None; 13]).unwrap();
+        let waste = layout.pile(1).unwrap();
+        let foundation = layout.pile(2).unwrap();
+        assert!(
+            waste.x + waste.width <= foundation.x,
+            "the fan overlaps the foundations: {} vs {}",
+            waste.x + waste.width,
+            foundation.x
+        );
+        assert_slots_round_trip(&layout);
     }
 
     #[test]

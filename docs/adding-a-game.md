@@ -473,8 +473,21 @@ Spot::new(pile, row, slot, fan)
 
 - **row** — `0` is the top. Rows stack downward with one blank row between.
 - **slot** — column along the row, `0`-based. Skipped slots are gaps.
-- **fan** — `Fan::Down` (cards overlap downward, all clickable) or `Fan::None`
-  (only the exposed card is drawn).
+- **fan** — how the pile shows its cards:
+  - `Fan::Down` — cards overlap downward; every one is drawn and clickable.
+  - `Fan::None` — only the exposed card is drawn.
+  - `Fan::Right(n)` — the last `n` cards overlap rightwards. All are drawn, but
+    only the exposed one is addressable: a click anywhere in the fan picks up the
+    card on top. Klondike's waste uses `Fan::Right(draw_count)` so a draw of
+    three can be read at a glance. A covered card keeps its border and three
+    cells of its face, which is every rank and suit including a ten's.
+
+A rightward fan spreads into whatever lies to its right, so put it beside a
+skipped slot. It costs the board no extra width unless it runs past the widest
+row — `board_width` measures from each spot's own left edge, not from the slot
+count. A three-card fan is 14 cells wide, so it can end flush against the next
+pile rather than a column clear of it; that is a squeeze, not a bug, and the
+layout will never let it overlap.
 
 A row containing any `Fan::Down` pile is a *fanned row* and grows to fill the
 height left over; every other row is exactly one card tall. Have at most one
@@ -496,8 +509,10 @@ What you get automatically:
 A pile with no `Spot` is not drawn. That is legitimate: Scorpion's stock holds
 cards but appears only as a status-bar count.
 
-Note that a `Fan::None` pile's single slot carries the **exposed** card's index,
-not zero — so a click on the waste picks up the card you can see.
+Note that a `Fan::None` or `Fan::Right` pile's single slot carries the **exposed**
+card's index, not zero — so a click on the waste picks up the card you can see.
+Cards drawn but not addressable live in `PileLayout::spread`, which the renderer
+walks; only `slots` decides what a click can name.
 
 ## Rule options
 

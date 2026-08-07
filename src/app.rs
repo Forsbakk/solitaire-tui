@@ -287,10 +287,16 @@ impl Session {
     /// Keep the cursor on a real face-up card after the board changes.
     fn clamp_cursor(&mut self) {
         let pile = self.board.pile(self.cursor_pile);
-        self.cursor_card = match (pile.first_face_up(), pile.len()) {
-            (Some(first), len) => Some(self.cursor_card.unwrap_or(len - 1).clamp(first, len - 1)),
-            _ => None,
+        let Some(last) = pile.len().checked_sub(1) else {
+            self.cursor_card = None;
+            return;
         };
+        // A pile with nothing face up is still somewhere the cursor can be: the
+        // stock has an exposed card, even though it is face down and cannot be
+        // picked up. Blanking the cursor here would leave the stock looking
+        // unfocused the moment it was drawn from.
+        let first = pile.first_face_up().unwrap_or(last);
+        self.cursor_card = Some(self.cursor_card.unwrap_or(last).clamp(first, last));
     }
 
     fn place(&self, pile: PileId) -> (u8, u16) {
@@ -1229,6 +1235,200 @@ mod tests {
         }
         assert!(session.history.is_empty());
         assert!(!session.rules.is_won(&session.board), "all the way back");
+    }
+
+    /// Klondike's waste, as `(pile id, drawn cards)`.
+    fn waste(session: &Session) -> PileId {
+        session
+            .board
+            .first_of_kind(PileKind::Waste)
+            .expect("Klondike has a waste")
+    }
+
+    #[test]
+    fn a_draw_of_three_shows_all_three_but_plays_only_the_top() {
+        let mut session = klondike(42);
+        press(&mut session, KeyCode::Char('d'));
+
+        let view = screen(&mut session, 80, 22);
+        println!("{view}");
+        let turned = session.board.pile(waste(&session)).cards().to_vec();
+        assert_eq!(turned.len(), 3);
+
+        // Every card the draw turned up is legible in full — rank and suit —
+        // covered ones included, tens included.
+        assert!(
+            turned.iter().any(|card| card.rank_str() == "10"),
+            "this deal's first draw holds a ten, which is the tight case"
+        );
+        for card in &turned {
+            assert!(
+                view.contains(&card.to_string()),
+                "{card} is not legible:\n{view}"
+            );
+        }
+
+        // But only the exposed one can be picked up.
+        session.cursor_pile = waste(&session);
+        session.snap_cursor();
+        assert_eq!(session.cursor_card, Some(2));
+    }
+
+    #[test]
+    fn a_draw_of_one_fans_nothing() {
+        let mut game = crate::rules::klondike::Klondike::default();
+        crate::rules::Rules::configure(&mut game, 0, 1); // Draw: 1
+        let mut session = Session::new(Box::new(game), 42);
+        press(&mut session, KeyCode::Char('d'));
+
+        let view = screen(&mut session, 80, 22);
+        assert_eq!(session.board.pile(waste(&session)).len(), 1);
+        assert_eq!(
+            view.lines()
+                .find(|line| line.contains('┌'))
+                .unwrap()
+                .matches("┌────┐")
+                .count(),
+            6,
+            "stock, waste and four foundations, none of them fanned:\n{view}"
+        );
+    }
+
+    #[test]
+    fn the_fanned_waste_stops_before_the_foundations() {
+        // Seven slots leave no room for a gap between a three-card fan and the
+        // first foundation, so they sit flush — but the fan must never overlap
+        // one, which would draw a foundation over the waste's top card.
+        let mut session = klondike(42);
+        press(&mut session, KeyCode::Char('d'));
+        screen(&mut session, 80, 22);
+
+        let layout = session.layout.as_ref().unwrap();
+        let fan = layout.pile(waste(&session)).unwrap();
+        let foundation = session
+            .board
+            .first_of_kind(PileKind::Foundation)
+            .and_then(|pile| layout.pile(pile))
+            .unwrap();
+        assert!(
+            fan.x + fan.width <= foundation.x,
+            "the fan runs into the foundations: {} vs {}",
+            fan.x + fan.width,
+            foundation.x
+        );
+    }
+
+    #[test]
+    fn clicking_a_covered_waste_card_takes_the_one_on_top() {
+        let mut session = klondike(42);
+        press(&mut session, KeyCode::Char('d'));
+        screen(&mut session, 80, 22);
+
+        // The leftmost, most-covered card of the fan — the one a click must
+        // *not* try to pick up, since it is not in play.
+        let spread = &session
+            .layout
+            .as_ref()
+            .unwrap()
+            .pile(waste(&session))
+            .unwrap()
+            .spread;
+        assert_eq!(spread.len(), 3, "three cards are drawn side by side");
+        let (_, x) = spread[0];
+        let y = session
+            .layout
+            .as_ref()
+            .unwrap()
+            .pile(waste(&session))
+            .unwrap()
+            .top
+            + 1;
+
+        click(&mut session, x + 1, y);
+        let (pile, index) = session.selection.expect("the click picked something up");
+        assert_eq!(pile, waste(&session));
+        assert_eq!(index, 2, "the exposed card, not the one clicked");
+    }
+
+    #[test]
+    fn the_cursor_stays_findable_once_a_card_is_picked_up() {
+        // Selecting used to replace the cursor accent outright, so the caret
+        // vanished at the moment the player most needed to know where they were.
+        for mut session in [scorpion(42), klondike(42)] {
+            let before = screen(&mut session, 80, 30);
+            assert_eq!(before.matches('▶').count(), 1, "got:\n{before}");
+
+            press(&mut session, KeyCode::Char(' '));
+            assert!(session.selection.is_some());
+
+            let after = screen(&mut session, 80, 30);
+            assert_eq!(
+                after.matches('▶').count(),
+                1,
+                "the caret survives selection:\n{after}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_selected_waste_card_is_marked_as_held() {
+        let mut session = klondike(42);
+        press(&mut session, KeyCode::Char('d'));
+        session.cursor_pile = waste(&session);
+        session.snap_cursor();
+        press(&mut session, KeyCode::Char(' '));
+
+        let view = screen(&mut session, 80, 22);
+        println!("{view}");
+        assert!(view.contains("┏━━━━┓"), "held cards get a heavy frame");
+        assert_eq!(view.matches('▶').count(), 1, "and the caret is still there");
+        assert!(view.contains("holding 1 card"));
+    }
+
+    #[test]
+    fn the_stock_stays_marked_after_it_is_drawn_from() {
+        // The stock is entirely face down, so it has no face-up card to clamp
+        // the cursor onto — which used to blank the cursor on every draw and
+        // leave the pile looking unfocused just after it was used.
+        let mut session = klondike(42);
+        session.cursor_pile = session.board.first_of_kind(PileKind::Stock).unwrap();
+        session.snap_cursor();
+
+        let before = screen(&mut session, 80, 24);
+        assert_eq!(
+            before.matches('╔').count(),
+            1,
+            "the stock is marked:\n{before}"
+        );
+        assert_eq!(before.matches('▶').count(), 1);
+
+        for draw in 1..=3 {
+            press(&mut session, KeyCode::Char('d'));
+            let after = screen(&mut session, 80, 24);
+            assert_eq!(
+                after.matches('╔').count(),
+                1,
+                "still marked after draw {draw}:\n{after}"
+            );
+            assert_eq!(after.matches('▶').count(), 1, "draw {draw}:\n{after}");
+            assert!(session.cursor_card.is_some(), "draw {draw}");
+        }
+    }
+
+    #[test]
+    fn an_emptied_stock_still_shows_the_cursor() {
+        let mut session = klondike(42);
+        session.cursor_pile = session.board.first_of_kind(PileKind::Stock).unwrap();
+        session.snap_cursor();
+        while !session.board.pile(session.cursor_pile).is_empty() {
+            press(&mut session, KeyCode::Char('d'));
+        }
+
+        let view = screen(&mut session, 80, 24);
+        println!("{view}");
+        assert_eq!(session.cursor_card, None, "there is no card to sit on");
+        assert_eq!(view.matches('╔').count(), 1, "but the pile is still marked");
+        assert!(view.contains('↻'), "and says it can be refilled");
     }
 
     #[test]

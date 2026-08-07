@@ -136,6 +136,14 @@ impl Focus {
         pins
     }
 
+    /// Whether the cursor is on this exact card. Kept separate from the accent
+    /// because picking a card up turns it from `Cursor` to `Selected` — the
+    /// caret has to stay put through that, or the cursor appears to vanish at
+    /// the very moment the player needs to know where it is.
+    fn is_cursor(&self, pile: PileId, index: usize) -> bool {
+        self.pile == pile && self.card == Some(index)
+    }
+
     fn accent(&self, pile: PileId, index: usize) -> Accent {
         if let Some((selected_pile, first)) = self.selection
             && pile == selected_pile
@@ -171,7 +179,7 @@ pub fn draw_board(
     for pile_layout in &layout.piles {
         match pile_layout.fan {
             Fan::Down => draw_fanned(buffer, pile_layout, board, focus, layout.density),
-            Fan::None => draw_flat(buffer, pile_layout, board, rules, focus),
+            Fan::None | Fan::Right(_) => draw_flat(buffer, pile_layout, board, rules, focus),
         }
     }
 }
@@ -224,7 +232,23 @@ fn draw_empty(buffer: &mut Buffer, x: u16, top: u16, accent: Accent, marker: Opt
     }
 }
 
-/// A pile that shows only its exposed card: stock, waste, a foundation.
+/// A whole card box, drawn on its own rather than overlapping a pile.
+fn draw_card_box(
+    buffer: &mut Buffer,
+    x: u16,
+    top: u16,
+    card: Option<Card>,
+    accent: Accent,
+    caret: bool,
+) {
+    let style = accent.style();
+    put(buffer, x, top, accent.frame().first, style);
+    draw_face(buffer, x, top + 1, card, accent, caret);
+    put(buffer, x, top + 2, accent.frame().last, style);
+}
+
+/// A pile drawn as a row of cards: stock, a foundation, or a waste showing the
+/// last few cards a draw turned up.
 fn draw_flat(
     buffer: &mut Buffer,
     layout: &PileLayout,
@@ -233,7 +257,7 @@ fn draw_flat(
     focus: &Focus,
 ) {
     let pile = board.pile(layout.pile);
-    let Some(slot) = layout.slots.first() else {
+    let Some((&(top_index, top_x), covered)) = layout.spread.split_last() else {
         // An empty stock that can be refilled says so, rather than looking
         // like a pile that has simply run out.
         let refillable =
@@ -255,19 +279,31 @@ fn draw_flat(
         return;
     };
 
-    let accent = focus.accent(layout.pile, slot.index);
-    let frame = accent.frame();
-    let style = accent.style();
-    put(buffer, layout.x, layout.top, frame.first, style);
-    draw_face(
+    let face = |index: usize| pile.is_face_up(index).then(|| pile.cards()[index]);
+
+    // The covered cards first, so the exposed one overlaps them. They are drawn
+    // plain whatever the cursor is doing — they cannot be taken, and accenting
+    // them would suggest otherwise.
+    // The covered cards first, so the exposed one overlaps them. Each keeps its
+    // border and three cells of its face — the whole thing bar the trailing
+    // space. They are drawn plain whatever the cursor is doing, since accenting
+    // a card that cannot be taken would only mislead.
+    for &(index, x) in covered {
+        draw_card_box(buffer, x, layout.top, face(index), Accent::Plain, false);
+    }
+    draw_card_box(
         buffer,
-        layout.x,
-        layout.top + 1,
-        pile.is_face_up(slot.index)
-            .then(|| pile.cards()[slot.index]),
-        accent,
+        top_x,
+        layout.top,
+        face(top_index),
+        focus.accent(layout.pile, top_index),
+        // A fanned pile puts its caret at the pile's own left edge rather than
+        // beside the exposed card, where it would sit on top of a covered one.
+        covered.is_empty() && focus.is_cursor(layout.pile, top_index),
     );
-    put(buffer, layout.x, layout.top + 2, frame.last, style);
+    if !covered.is_empty() && focus.is_cursor(layout.pile, top_index) {
+        draw_caret(buffer, layout.x, layout.top + 1);
+    }
 }
 
 fn draw_fanned(
@@ -310,7 +346,8 @@ fn draw_fanned(
                 let accent = accent_of(position);
                 let above = position.checked_sub(1).map(accent_of);
                 draw_junction(buffer, x, slot.top, above, Some(accent));
-                draw_face(buffer, x, slot.top + 1, face(slot.index), accent);
+                let caret = focus.is_cursor(layout.pile, slot.index);
+                draw_face(buffer, x, slot.top + 1, face(slot.index), accent, caret);
                 if is_last(slot.index) {
                     draw_junction(buffer, x, slot.top + 2, Some(accent), None);
                 }
@@ -322,7 +359,8 @@ fn draw_fanned(
             draw_junction(buffer, x, layout.top, None, Some(accent_of(0)));
             for slot in &layout.slots {
                 let accent = focus.accent(layout.pile, slot.index);
-                draw_face(buffer, x, slot.top, face(slot.index), accent);
+                let caret = focus.is_cursor(layout.pile, slot.index);
+                draw_face(buffer, x, slot.top, face(slot.index), accent, caret);
                 if is_last(slot.index) {
                     draw_junction(buffer, x, slot.top + 1, Some(accent), None);
                 }
@@ -382,11 +420,14 @@ fn draw_caret(buffer: &mut Buffer, card_x: u16, y: u16) {
 }
 
 /// A card's face row: `│ K♠ │`, or a hatched back when face down.
-fn draw_face(buffer: &mut Buffer, x: u16, y: u16, card: Option<Card>, accent: Accent) {
+///
+/// `caret` is passed rather than derived from `accent`, so the gutter pointer
+/// stays on the cursor's card even once it has been picked up.
+fn draw_face(buffer: &mut Buffer, x: u16, y: u16, card: Option<Card>, accent: Accent, caret: bool) {
     let style = accent.style();
     put(buffer, x, y, accent.frame().side, style);
     put(buffer, x + CARD_W - 1, y, accent.frame().side, style);
-    if accent == Accent::Cursor {
+    if caret {
         draw_caret(buffer, x, y);
     }
 

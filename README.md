@@ -20,10 +20,13 @@ far — Klondike and Scorpion — chosen from a menu at startup.
                  ↑↓ game   tab rules   enter play   q quit
 ```
 
+Klondike after one draw of three — the stock on the left, the waste fanned out
+beside it, and the four foundations waiting:
+
 ```
-┌────┐ ┌────┐        ┌────┐ ┌────┐ ┌────┐ ┌────┐
-│▞▞▞▞│ │    │        │    │ │    │ │    │ │    │
-└────┘ └────┘        └────┘ └────┘ └────┘ └────┘
+┌────┐ ┌───┌───┌────┐┌────┐ ┌────┐ ┌────┐ ┌────┐
+│▞▞▞▞│ │10♠│ J♠│ 9♠ ││    │ │    │ │    │ │    │
+└────┘ └───└───└────┘└────┘ └────┘ └────┘ └────┘
  [1]     2      3      4      5      6      7
 ╔════╗ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
 ║ 7♠ ║ │▞▞▞▞│ │▞▞▞▞│ │▞▞▞▞│ │▞▞▞▞│ │▞▞▞▞│ │▞▞▞▞│
@@ -71,9 +74,11 @@ are the stock.
 * A run of cards moves as a unit only if it is **already in order**. Any single
   face-up card moves on its own.
 * Only a **King** may move to an empty pile.
-* Press `d` (or `space` on the stock) to turn cards onto the waste; only the top
-  waste card is in play. When the stock runs out, the same key puts the waste
-  back, as often as the **Redeals** rule allows.
+* Press `d` (or `space` on the stock) to turn cards onto the waste. On a draw of
+  three all three are shown, fanned out so every rank and suit stays readable,
+  though only the one on top is in play — clicking any of them picks up that
+  top card. When the stock runs out, the same key puts the waste back, as often
+  as the **Redeals** rule allows.
 * The four **foundations** build up in suit from the Ace. `f` sends the card
   under the cursor to one if it fits.
 * Win by sending all 52 cards home. Once nothing is face down and the stock is
@@ -136,6 +141,9 @@ weight, so they stay legible where colour does not survive:
 | `[5]` above a pile, `▶` in the gutter, cyan `║` frame | where the cursor is |
 | yellow `┃` frame around a run of cards | the cards you are carrying |
 | green `║` frame | where the current hint says to drop |
+
+The `▶` stays beside the cursor even once you have picked a card up, so the frame
+tells you *what* you are holding and the caret still tells you *where* you are.
 
 ## Hints
 

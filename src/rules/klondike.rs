@@ -126,9 +126,12 @@ impl Rules for Klondike {
     }
 
     fn spec(&self, _board: &Board) -> BoardSpec {
+        // The waste fans rightwards so a draw of three can be read at a glance,
+        // even though only the card on top of it is in play. It spreads into the
+        // empty slot beside it, so it costs the board no extra width.
         let mut spots = vec![
             Spot::new(STOCK, 0, 0, Fan::None),
-            Spot::new(WASTE, 0, 1, Fan::None),
+            Spot::new(WASTE, 0, 1, Fan::Right(self.draw_count())),
         ];
         // A gap at slot 2 keeps the stock and the foundations apart, which is
         // how every physical layout of this game reads.

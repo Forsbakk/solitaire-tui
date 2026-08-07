@@ -79,8 +79,9 @@ the `Step.recycle` flag rather than being recomputed.
 
 ### The layout is the single source of truth for board shape
 
-A game declares a `BoardSpec` of `Spot`s — a pile, a row, a slot, and `Fan::Down`
-(cards overlap downwards) or `Fan::None` (only the exposed card shows).
+A game declares a `BoardSpec` of `Spot`s — a pile, a row, a slot, and a `Fan`:
+`Down` (cards overlap downwards), `None` (only the exposed card shows), or
+`Right(n)` (the last `n` overlap rightwards, Klondike's waste).
 `layout::compute` places fixed rows at `CARD_H` each and gives the remaining
 height to the fanned row. `render.rs` draws *from* the resulting `BoardLayout`,
 and mouse clicks resolve *against* it via `hit()`. `Session` stores the layout
@@ -99,8 +100,23 @@ different rows (Klondike's foundations sit above tableau piles), so `hit()`
 resolves on both axes via `claim_bottom`; a fanned pile claims every row down to
 the bottom of the board so clicking below a short pile still targets it.
 
-A `Fan::None` pile's single slot carries the *exposed* card's index, not zero —
-otherwise clicking the waste would grab the bottom card.
+A `Fan::None`/`Fan::Right` pile's single slot carries the *exposed* card's index,
+not zero — otherwise clicking the waste would grab the bottom card. Cards that are
+drawn but not addressable live in `PileLayout::spread`; only `slots` decides what
+`hit()` can name, which is how a fanned waste shows three cards but plays one.
+
+The caret (`▶`) is passed into `draw_face` rather than derived from the accent:
+picking a card up turns its accent from `Cursor` to `Selected`, and deriving the
+caret would make the cursor vanish at the moment the player most needs it.
+`the_cursor_stays_findable_once_a_card_is_picked_up` guards this.
+
+**The cursor can sit on a face-down card.** `Session::cursor_card` names the card
+the cursor is on, not a card that can be picked up — the stock is entirely face
+down and still has to look focused. `clamp_cursor` therefore falls back to the
+exposed card when a pile has nothing face up; blanking it to `None` makes the
+accent fall through to `Plain` and the pile look unfocused right after a draw.
+Guarded by `the_stock_stays_marked_after_it_is_drawn_from`. Whether a card can
+actually be *taken* is `Pile::is_face_up`, checked separately in `activate`.
 
 ### Slot ownership and shared border rows
 

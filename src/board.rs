@@ -341,10 +341,13 @@ impl Board {
 /// How a pile shows the cards it holds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Fan {
-    /// Only the exposed card is drawn — stock, waste, foundations.
+    /// Only the exposed card is drawn — stock, foundations.
     None,
     /// Cards overlap downwards, so every one of them can be seen and clicked.
     Down,
+    /// The last `n` cards overlap rightwards. Only the exposed one is in play;
+    /// the rest are shown so the player can see what a draw turned up.
+    Right(usize),
 }
 
 /// Where a pile sits: which row of the board, and which slot along it.
@@ -392,14 +395,6 @@ impl BoardSpec {
     /// The spots in `row`, left to right.
     pub fn row(&self, row: u8) -> impl Iterator<Item = &Spot> + '_ {
         self.spots.iter().filter(move |spot| spot.row == row)
-    }
-
-    /// How many slots wide the widest row is.
-    pub fn width(&self) -> u16 {
-        (0..self.rows())
-            .map(|row| self.row(row).map(|spot| spot.slot + 1).max().unwrap_or(0))
-            .max()
-            .unwrap_or(0)
     }
 
     pub fn spot(&self, pile: PileId) -> Option<&Spot> {
