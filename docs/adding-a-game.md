@@ -216,6 +216,8 @@ fn is_won(&self, board: &Board) -> bool {
 
 `Pile::is_complete_suit` (Ace up to King, one suit) and `Pile::is_complete_run`
 (King down to Ace, one suit, nothing hidden) are both on `Pile` already.
+`is_complete_suit` is also what certifies a Spider foundation: a finished run is
+turned over as it is filed, so it arrives Ace up to King like everyone else's.
 
 ### 6. Convenience moves
 
@@ -348,8 +350,9 @@ Defined in `src/rules/mod.rs`.
 
 | Method | Default | Override when |
 | --- | --- | --- |
-| `action_for(board, mv)` | `Action::moving(...)` — lift a tail onto another pile | the move does more than move cards |
+| `action_for(board, mv)` | `Action::moving(...)` — lift a tail onto another pile | the move does more than move cards — `spider.rs` appends the steps that file a finished run, so the whole thing stays one undo |
 | `activate(board, pile)` | `None` | a pile *does* something when pressed: deal, draw, recycle |
+| `stock_refusal(board)` | `"The stock has nothing left to give."` | a *full* stock can still refuse, and saying it is spent would be a lie — Spider will not deal onto an empty column |
 | `send_home(board, from)` | `None` | the game has foundations and wants the `f` key. The app passes the pile of the card in hand when one is held, so it must work for a lone card as well as for the pile under the cursor |
 | `autoplay(board)` | `None` | a decided position should be playable out with `A` |
 | `is_useful(board, mv)` | `true` | some legal moves are pointless |
@@ -592,6 +595,13 @@ Keep the divergence to one named type. An `enum` with a method that both games
 call, rather than a `bool` threaded through several functions, is what stops the
 second game slowly acquiring a second copy of the first one's rules.
 
+`src/rules/spiderette.rs` is the second instance, and shows the shape scales
+past a single predicate: Spiderette differs from Spider in deck count, column
+count and suit count, and all three live in one `Copy` `Setup` struct passed as
+one first argument. The test that the split is honest is that `spider::check`
+takes no `Setup` at all — the build rule, the lift rule and the empty-column
+rule really are one game's.
+
 Its tests should cover only what differs — the build rule, and an assertion that
 the deals really are identical — and lean on the first game's suite for the rest.
 
@@ -663,8 +673,10 @@ Write on top of that, in your own module:
    walk covers those steps too.
 
 5. **A card-conservation test** if the game moves cards in unusual ways —
-   collect every card on the board into a `HashSet` after each move and assert
-   the count never changes.
+   collect every card on the board after each move and assert it never changes.
+   A `HashSet` is right for a single-deck game; a two-deck game needs a sorted
+   multiset keyed on `(suit.index(), rank)`, because a set collapses the
+   duplicate and would pass while cards went missing.
 
 Tests are named as sentences, and live in a `#[cfg(test)] mod tests` in the same
 file. Run one with `cargo test only_a_king`, and print a board mid-test with
@@ -692,8 +704,9 @@ file. Run one with `cargo test only_a_king`, and print a board mid-test with
 
 **Forgetting to reject pile kinds in `check`.** `suggestions` tries every
 `(from, index, to)` triple on the board. If you only compare ranks and suits,
-you will find the hint system proposing moves onto the stock. Both shipped games
-reject bad kinds explicitly, first thing.
+you will find the hint system proposing moves onto the stock. Every shipped game
+rejects bad kinds explicitly, first thing — and in Spider's case that one guard
+is also what keeps the player from filing a run by hand.
 
 **A `check` that is expensive.** It runs `O(piles² × cards)` times per hint
 press. Keep it to comparisons.
@@ -708,13 +721,28 @@ rethink the step rather than reaching past the invariant.
 what it has always dealt. The pinned-seed tests exist to catch this, and the
 splitmix64 shuffle in `card.rs` must not be swapped for `rand`.
 
-**Two decks.** `shuffled_deck` deals one 52-card deck. A two-deck game needs a
-multi-deck shuffle *and* an audit of anything identifying a card by value —
-`Card` derives `Eq` and `Hash`, and with two decks a value no longer names a
-single card.
+**Two decks.** `shuffled_decks(seed, decks)` in `card.rs` deals any number of
+decks, and `shuffled_decks(seed, 1)` is asserted equal to `shuffled_deck(seed)`,
+so two-deck games arrived without moving a single existing deal. What survives
+is the discipline: `Card` derives `Eq` and `Hash`, and with two decks a value no
+longer names a single card. A `HashSet<Card>` card-conservation test will
+happily pass while half the cards go missing — count a sorted multiset keyed on
+`(suit.index(), rank)` instead, as `spider.rs`'s `census` helper does. Nothing
+in `app.rs`, `render.rs`, `layout.rs` or `board.rs` identifies a card by value;
+keep it that way.
 
-**Ten tableau piles.** The digit shortcuts stop at `9`. Spider-sized boards need
-another key.
+**Ten tableau piles.** `0` is the tenth digit shortcut, and `draw_labels`
+numbers the tenth pile `0` so the label *is* the key. `board_width` already
+sizes a ten-column board at 69 cells, which fits an 80-column terminal.
+
+**Cards that leave play.** If a move can cause something else to happen — a
+finished Spider run leaving the tableau — the extra `Step`s must be appended to
+the *same* `Action`, or the player gets two undos for one move and `app.rs` has
+to learn what a run is. Detection needs the board *after* the move, so build
+those steps against a scratch clone: each step's flags are then computed against
+the state it will actually meet, which is exactly what `Board::undo` assumes.
+`spider.rs`'s `with_filing` is the pattern, and the entry points to cover are
+`action_for` *and* `activate` — dealing a card can finish a run too.
 
 **A new board geometry.** Rows of slots cover every game currently planned
 except the triangular ones. Pyramid also needs a different *gesture* — pick two

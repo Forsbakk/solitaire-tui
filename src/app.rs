@@ -211,8 +211,14 @@ impl Session {
             KeyCode::Up | KeyCode::Char('k') => self.step_card(-1),
             KeyCode::Down | KeyCode::Char('j') => self.step_card(1),
             KeyCode::Char(' ') | KeyCode::Enter => self.activate(),
-            KeyCode::Char(digit @ '1'..='9') => {
-                let index = digit as usize - '1' as usize;
+            // `0` is the tenth pile, so a Spider board's shortcuts run 1…9
+            // then 0 — which is how `render::draw_labels` numbers them too.
+            KeyCode::Char(digit @ ('1'..='9' | '0')) => {
+                let index = if digit == '0' {
+                    9
+                } else {
+                    digit as usize - '1' as usize
+                };
                 if let Some(&pile) = self.tableau.get(index) {
                     if self.selection.is_some() {
                         self.drop_on(pile);
@@ -414,7 +420,12 @@ impl Session {
         let stock = self.board.first_of_kind(PileKind::Stock);
         match stock.and_then(|pile| self.rules.activate(&self.board, pile)) {
             Some(action) => self.perform(action),
-            None if stock.is_some() => self.warn("The stock has nothing left to give."),
+            // The game words its own refusal: an empty stock and a stock that
+            // will not deal yet are different complaints.
+            None if stock.is_some() => {
+                let refusal = self.rules.stock_refusal(&self.board);
+                self.warn(refusal);
+            }
             None => self.warn("This game has no stock."),
         }
     }
@@ -603,6 +614,8 @@ pub fn random_seed() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::board::{Pile, PileKind};
+    use crate::card::{ACE, Card, KING, Suit};
     use crate::rules::scorpion::Scorpion;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -1621,11 +1634,137 @@ mod tests {
     }
 
     #[test]
-    fn both_games_survive_every_awkward_terminal_size() {
-        for mut session in [scorpion(42), klondike(42)] {
-            for (width, height) in [(80, 30), (80, 14), (60, 12), (48, 10), (30, 8), (200, 60)] {
+    fn every_game_survives_every_awkward_terminal_size() {
+        // Spider's board is 69 cells wide against Klondike's 48, so the small
+        // sizes here are the ones that must fall back rather than panic.
+        for game in crate::rules::games() {
+            let mut session = Session::new(game, 42);
+            for (width, height) in [(80, 30), (80, 14), (69, 12), (60, 12), (48, 10), (30, 8)] {
                 screen(&mut session, width, height);
             }
         }
+    }
+
+    fn spider(seed: u64) -> Session {
+        Session::new(Box::new(crate::rules::spider::Spider::default()), seed)
+    }
+
+    /// A ten-column Spider board built column by column, with bare
+    /// foundations and an empty stock behind it.
+    fn spider_board(columns: &[Pile]) -> Board {
+        let mut piles: Vec<Pile> = columns.to_vec();
+        piles.resize(10, Pile::tableau(0, &[]));
+        piles.resize(18, Pile::new(PileKind::Foundation));
+        piles.push(Pile::new(PileKind::Stock));
+        Board::new(0, piles)
+    }
+
+    #[test]
+    fn a_ten_column_board_draws_every_pile_and_numbers_the_tenth_zero() {
+        let mut session = spider(42);
+        let view = screen(&mut session, 80, 30);
+        println!("{view}");
+
+        assert_eq!(
+            piles_drawn(&view),
+            9,
+            "the stock and eight foundations share the top row",
+        );
+        assert!(view.contains("runs 0/8"), "the game's own status shows");
+        assert!(view.contains("deals 5"));
+
+        let labels = view
+            .lines()
+            .find(|line| line.contains("[1]"))
+            .expect("the tableau is numbered");
+        assert!(
+            labels.ends_with(" 0"),
+            "the tenth pile is labelled 0: {labels:?}",
+        );
+        assert!(!labels.contains("10"), "which is the key, not its ordinal");
+    }
+
+    #[test]
+    fn the_zero_key_jumps_to_the_tenth_pile() {
+        let mut session = spider(42);
+        session.board = spider_board(&[
+            Pile::tableau(0, &[Card::new(8, Suit::Spades)]),
+            Pile::tableau(0, &[]),
+        ]);
+        session.board = {
+            let mut piles: Vec<Pile> = session.board.piles().to_vec();
+            piles[9] = Pile::tableau(0, &[Card::new(9, Suit::Spades)]);
+            Board::new(0, piles)
+        };
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('0'));
+        assert_eq!(session.cursor_pile, 9, "0 is the tenth pile");
+
+        // And it drops there too, which is the half a lone jump would miss.
+        press(&mut session, KeyCode::Char('1'));
+        press(&mut session, KeyCode::Char(' '));
+        press(&mut session, KeyCode::Char('0'));
+        assert_eq!(session.board.pile(9).len(), 2, "the 8♠ landed on the 9♠");
+        assert!(session.board.pile(0).is_empty());
+    }
+
+    #[test]
+    fn the_deal_key_says_why_the_stock_refused() {
+        // Spider is the first game that can refuse a deal from a stock that is
+        // still full, so the shared "nothing left to give" would be a lie.
+        let mut session = spider(42);
+        let mut piles: Vec<Pile> = session.board.piles().to_vec();
+        piles[0] = Pile::tableau(0, &[]);
+        session.board = Board::new(42, piles);
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('d'));
+        assert_eq!(session.message, "Fill every empty column before dealing.");
+        assert_eq!(session.board.pile(1).len(), 6, "and nothing was dealt");
+
+        let spent = scorpion(42);
+        assert_eq!(
+            spent.rules.stock_refusal(&spent.board),
+            "The stock has nothing left to give.",
+            "games that only run dry keep the shared wording",
+        );
+    }
+
+    #[test]
+    fn filing_a_run_is_one_undo() {
+        let mut session = spider(42);
+        let run: Vec<Card> = (2..=KING)
+            .rev()
+            .map(|rank| Card::new(rank, Suit::Spades))
+            .collect();
+        session.board = spider_board(&[
+            Pile::tableau(0, &run),
+            Pile::tableau(0, &[Card::new(ACE, Suit::Spades)]),
+        ]);
+        let start = session.board.clone();
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('2'));
+        press(&mut session, KeyCode::Char(' '));
+        press(&mut session, KeyCode::Char('1'));
+
+        assert_eq!(
+            session.history.len(),
+            1,
+            "the run files itself as part of the move"
+        );
+        assert!(
+            session.board.pile(0).is_empty(),
+            "thirteen cards left the tableau"
+        );
+        assert_eq!(
+            session.board.pile(10).exposed(),
+            Some(Card::new(KING, Suit::Spades)),
+            "and turned over onto the first foundation",
+        );
+
+        press(&mut session, KeyCode::Char('u'));
+        assert_eq!(session.board, start, "one undo takes the whole thing back");
     }
 }

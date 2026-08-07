@@ -1,8 +1,8 @@
 # solitaire
 
-Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Four games so
-far — Klondike, Scorpion, Yukon and Russian Solitaire — chosen from a menu at
-startup.
+Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Six games so
+far — Klondike, Scorpion, Yukon, Russian Solitaire, Spiderette and Spider —
+chosen from a menu at startup.
 
 ```
 ╭ Games ─────────────╮╭ Klondike ────────────────────────────────────────╮
@@ -10,8 +10,8 @@ startup.
 │   Scorpion         ││ moving ordered runs as a unit. Only a King may   │
 │   Yukon            ││ take an empty pile.                              │
 │   Russian          ││                                                  │
-│                    ││ Turn the stock for more cards, and build the     │
-│                    ││ four foundations up in suit from the Ace. Win by │
+│   Spiderette       ││ Turn the stock for more cards, and build the     │
+│   Spider           ││ four foundations up in suit from the Ace. Win by │
 │                    ││ sending all 52 cards home.                       │
 │                    ││                                                  │
 │                    ││ Rules                                            │
@@ -134,16 +134,50 @@ rule are all Yukon's.
 That one word takes most of your legal moves away, so expect to lose far more
 often than you win — which is the point of the game.
 
+### Spiderette
+
+Single-deck Spider. Seven columns dealt 1 to 7 cards, only the last of each face
+up; the other 24 cards are the stock. This is the first game here whose tension
+comes from the stock rather than the tableau.
+
+* Build the tableau **down regardless of suit** — any 8 goes on any 9.
+* Only a **run of one suit** may be lifted as a unit. Everything else moves one
+  card at a time, which is why building in suit is worth the trouble.
+* **Any** card may take an empty column.
+* `d` deals **one card onto every column at once**, and refuses while any column
+  stands empty. So an empty column is both the room you need to work and the
+  thing you must give up to deal — that is the whole game.
+* The last deal is short: 24 cards over seven columns is three full rounds and a
+  round of three, which covers the leftmost three columns.
+* A complete **King-to-Ace run in one suit files itself**, leaving the tableau
+  for the foundations above the board. It happens as part of the move that
+  finished it, so one `u` takes the whole thing back.
+* Win by filing all four runs.
+
+There is no `f` and no `A`: filing is automatic, and a Spider board is never
+decided until it is won.
+
+### Spider
+
+Spiderette on two decks and ten columns — four columns of six and six of five,
+with 50 cards left over for five deals. Eight runs to file instead of four.
+Every other rule is Spiderette's.
+
+Rules you can change: **Suits** (1, 2 or 4), defaulting to 1. One-suit Spider is
+the most forgiving game here and a good first patience in a terminal. The suit
+count repaints one deal rather than dealing a different one, so `--seed 42` is
+the same board at all three difficulties.
+
 ## Keys
 
 | Key | |
 | --- | --- |
 | `← →` `h l` | move between piles |
 | `↑ ↓` `k j` | move up and down a pile, and between rows |
-| `1`…`9` | jump to a tableau pile, or drop a held card there |
+| `1`…`9` `0` | jump to a tableau pile, or drop a held card there — `0` is the tenth, on Spider's board |
 | `space` `enter` | pick up the card under the cursor, or drop what you hold |
 | `esc` | put a held card back |
-| `d` | turn or deal the stock (Klondike, Scorpion) |
+| `d` | turn or deal the stock (Klondike, Scorpion, Spiderette, Spider) |
 | `f` | send a card to its foundation — the one held, or under the cursor (Klondike, Yukon, Russian) |
 | `A` | play out a decided game (Klondike, Yukon, Russian) |
 | `H` | suggest a move; press again for the next one |
@@ -184,7 +218,9 @@ line (`hint 2/5`) tells you how many there are.
 
 The ranking is a heuristic, not a solver. Each game supplies its own: they all
 prefer moves that turn a card face up, the foundation games then favour sending
-cards home, Klondike also favours clearing the waste, and none of them will offer
+cards home, Klondike also favours clearing the waste, the Spider games favour
+finishing a run and landing in suit and dislike splitting a suited run apart, and
+none of them will offer
 the legal-but-useless move of sliding a whole pile into an empty one. No game
 here can be played perfectly without searching, so a hint is a reasonable move
 rather than a winning one.

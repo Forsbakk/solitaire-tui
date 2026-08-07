@@ -1,17 +1,17 @@
 # Future games
 
-The crate plays Klondike, Scorpion, Yukon and Russian Solitaire, and a variant is now one
-file in `src/rules/` plus a line in `rules::games()`. So the question is no longer "what
-would it take to support a second game" but simply which games are worth adding and what
-each still needs from the shared code. This file is a candidate list, not a commitment.
-Entries are grouped by cost.
+The crate plays Klondike, Scorpion, Yukon, Russian Solitaire, Spiderette and Spider, and a
+variant is now one file in `src/rules/` plus a line in `rules::games()`. So the question is
+no longer "what would it take to support a second game" but simply which games are worth
+adding and what each still needs from the shared code. This file is a candidate list, not a
+commitment. Entries are grouped by cost.
 
 ## What exists to build on
 
 | Piece | Where | Reusable as-is? |
 | --- | --- | --- |
 | `Card`, `Suit`, `ACE`/`KING`, `face()` | `src/card.rs` | Yes |
-| `shuffled_deck(seed)` — splitmix64, Fisher–Yates | `src/card.rs` | One 52-card deck only |
+| `shuffled_deck(seed)` / `shuffled_decks(seed, decks)` — splitmix64, Fisher–Yates | `src/card.rs` | Yes — one deck or many |
 | `Pile` — a kind, a face-down prefix, a face-up suffix | `src/board.rs` | Yes, for every pile kind |
 | `Board` — a flat `Vec<Pile>` addressed by `PileId` | `src/board.rs` | Yes |
 | `Move` = `(from, index, to)` over piles of any kind | `src/board.rs` | Yes |
@@ -26,11 +26,13 @@ Entries are grouped by cost.
 | Per-game rule options in the menu and on the CLI | `src/rules/mod.rs`, `src/ui/menu.rs` | Yes — declare `OptionSpec`s and read `selected()` |
 | A free-tail lift onto foundations, with no stock at all | `src/rules/yukon.rs` | Yes — `pub(super)` functions, already shared with `russian.rs` |
 | Two games differing by one predicate, in two files | `src/rules/yukon.rs`, `src/rules/russian.rs` | Yes, as the pattern to copy |
+| Two games differing by three parameters, via one `Setup` struct | `src/rules/spider.rs`, `src/rules/spiderette.rs` | Yes, as the pattern to copy when it is more than a predicate |
+| Cards leaving play — steps appended to the move's own `Action` | `src/rules/spider.rs` `with_filing` | Yes, as the pattern to copy |
+| A stock that deals onto every column at once, repeatedly | `src/rules/spider.rs` | Yes |
+| A board ten columns wide, with `0` as the tenth shortcut | `src/rules/spider.rs`, `src/app.rs` | Yes — `board_width` sizes it at 69 cells |
 
-What still does not exist: a multi-deck shuffle, `PileKind::FreeCell` and
-`PileKind::Reserve` (deliberately not added until a game needs them), non-row board
-geometry, and scoring. The digit keys run `1`…`9`, so a game with ten tableau piles needs
-one more shortcut.
+What still does not exist: `PileKind::FreeCell` and `PileKind::Reserve` (deliberately not
+added until a game needs them), non-row board geometry, and scoring.
 
 ## Tier 1 — Scorpion's own rules, near-free
 
@@ -60,8 +62,8 @@ places to put things, so less of the game is spent stuck.
 **Cost against today's code**
 - Reuses: all of it. Pile counts already come from the spec, and `board_width` sizes
   itself, so ten columns needs no layout work.
-- Needs: a deal function and a spec with ten slots. A tenth digit shortcut, since the
-  keys stop at `9`.
+- Needs: a deal function and a spec with ten slots. Spider already paid for the tenth
+  digit shortcut and the wider board.
 - Verdict: a deal function and a constant.
 
 ### Double Scorpion
@@ -73,47 +75,13 @@ four.
 
 **Cost against today's code**
 - Reuses: the rules unchanged.
-- Needs: a multi-deck `shuffled_deck` — the one genuinely missing piece of shared code.
-- Verdict: cheap, with one trap — `Card` derives `Eq` and `Hash`, and with two decks a
-  card value no longer identifies a card. Anything that reasons about cards by value
-  rather than by position has to be re-checked.
+- Needs: nothing. `shuffled_decks(seed, 2)` arrived with Spider.
+- Verdict: cheap, and the one trap is now documented rather than theoretical — `Card`
+  derives `Eq` and `Hash`, and with two decks a card value no longer identifies a card.
+  Anything that reasons about cards by value rather than by position has to be
+  re-checked, and a card-conservation test needs a multiset rather than a `HashSet`.
 
-## Tier 2 — new rules on the shared machinery
-
-### Spiderette
-
-Single-deck Spider on seven columns. Build **down regardless of suit**, but only a
-**same-suit sequence** may be lifted as a unit. The stock deals one card onto every column
-at once, and can be dealt repeatedly. A complete King-to-Ace run in one suit leaves the
-tableau for good.
-
-*Why it is worth adding.* It is the first game here whose tension comes from the stock:
-every deal buries the board a little further, so the question is always whether to spend
-one now.
-
-**Cost against today's code**
-- Reuses: nearly everything. Klondike already shows the sequence check (`is_sequence`), a
-  repeatable `activate` on the stock, and a `StatusItem` counter.
-- Needs: a stock deal that puts one card on *every* pile — a multi-step `Action`, which
-  Scorpion's stock deal already demonstrates; and removal of completed runs, the one
-  genuinely new mechanic (cards leaving play rather than moving).
-- Verdict: real rules work, but no new shared code.
-
-### Spider
-
-Spiderette with two decks and ten columns, and the conventional one-suit, two-suit and
-four-suit settings.
-
-*Why it is worth adding.* One-suit Spider is the most forgiving game on this page and the
-best on-ramp for someone who has never played a patience game in a terminal.
-
-**Cost against today's code**
-- Reuses: everything Spiderette establishes.
-- Needs: the multi-deck shuffle. The suit count is an `OptionSpec`, which the menu already
-  knows how to present.
-- Verdict: near-free once Spiderette lands.
-
-## Tier 3 — a new pile kind each
+## Tier 2 — a new pile kind each
 
 ### FreeCell
 
@@ -167,7 +135,7 @@ not just "Klondike with names".
   bottom.
 - Verdict: worthwhile, but only after Klondike or FreeCell has paid for the groundwork.
 
-## Tier 4 — different board geometry
+## Tier 3 — different board geometry
 
 ### Golf
 
@@ -182,7 +150,7 @@ contrast to the hour-long ones above.
 - Reuses: the column row, the waste pile once Klondike or Canfield has built one.
 - Needs: columns that fan without a face-down prefix and are only five deep — a layout
   case, not a new geometry.
-- Verdict: cheap after Tier 3, and the only quick game on the list.
+- Verdict: cheap after Tier 2, and the only quick game on the list.
 
 ### TriPeaks
 
@@ -231,22 +199,26 @@ direction from Scorpion — very wide and very short rather than narrow and deep
 Most of the shared work the earlier tiers called for is now done. What a future game might
 still need from the common code, roughly in the order the games above want it:
 
-1. **A multi-deck shuffle** — and the discipline of never identifying a card by value,
-   since `Card` derives `Eq` and `Hash`. (Double Scorpion, Spider)
-2. **Cards leaving play** — a completed run removed from the tableau rather than moved.
-   `Step` can already express it as a move to a hidden pile; nothing does yet. (Spiderette)
-3. **`PileKind::FreeCell` and `PileKind::Reserve`** — removed from `board.rs` on purpose,
+1. **`PileKind::FreeCell` and `PileKind::Reserve`** — removed from `board.rs` on purpose,
    so they arrive with the game that needs them. (FreeCell, Canfield)
-4. **Foundations that do not start at Ace** — a base rank and wrapping rank comparisons.
+2. **Foundations that do not start at Ace** — a base rank and wrapping rank comparisons.
    (Canfield)
-5. **Non-row geometry and non-drag interactions.** The layout models rows of slots; a
+3. **Non-row geometry and non-drag interactions.** The layout models rows of slots; a
    triangle is not one, and Pyramid's "pick two cards" is not the pick-up-and-drop gesture
    `app.rs` implements. (TriPeaks, Pyramid, Accordion)
+
+The multi-deck shuffle and cards leaving play were the first two entries here until Spider
+shipped both. What that cost is worth knowing before the next such mechanic: the shuffle
+was six lines and one assertion (`shuffled_decks(seed, 1) == shuffled_deck(seed)`, which is
+what let two decks arrive without moving a single existing deal), and cards leaving play
+turned out to need no new shared code at all — a finished run is filed by extra `Step`s
+appended to the *same* `Action` as the move that finished it.
 
 Two things run underneath all of it, and both are already load-bearing. `Action` is shared
 rather than per-game — a `Vec<Step>` applied in order and undone in reverse — which is what
 keeps `app.rs` non-generic over `Box<dyn Rules>`; a new mechanic should be expressible as
-step flags rather than as a new action type. And `layout.rs` is the single source of truth,
+step flags rather than as a new action type, and Spider's filing is the proof that a
+genuinely new mechanic can be. And `layout.rs` is the single source of truth,
 so a click can never disagree with what is drawn: that property is what a triangular layout
 would be most at risk of quietly breaking, and the round-trip tests in `ui/layout.rs` and
 `app.rs` are what would catch it.
@@ -258,12 +230,9 @@ deal is a pure puzzle and `--seed` becomes a shareable puzzle number rather than
 replay. The determinism guarantee in `card.rs` is exactly the property such a number needs.
 Baker's Game and Seahaven follow it almost for free.
 
-**Spiderette and Spider** whenever the multi-deck shuffle gets written; they are the only
-games here whose tension comes from the stock rather than the tableau.
-
 **Wasp and Three Blind Mice** any time — they are afternoon projects, and good first
 exercises for anyone learning the `Rules` trait.
 
-**Tier 4 last, or never.** TriPeaks and Pyramid need a layout that nothing else reuses, and
+**Tier 3 last, or never.** TriPeaks and Pyramid need a layout that nothing else reuses, and
 the density fallback that makes this app work in a small terminal would have to be
 reinvented for a triangle.

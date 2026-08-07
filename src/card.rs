@@ -20,6 +20,19 @@ pub enum Suit {
 impl Suit {
     pub const ALL: [Self; 4] = [Self::Spades, Self::Hearts, Self::Diamonds, Self::Clubs];
 
+    /// Position in [`Suit::ALL`] — the inverse of indexing it.
+    ///
+    /// Useful wherever a suit needs an order it does not otherwise have:
+    /// squashing a deck into fewer suits, or sorting cards for a count.
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Spades => 0,
+            Self::Hearts => 1,
+            Self::Diamonds => 2,
+            Self::Clubs => 3,
+        }
+    }
+
     pub const fn symbol(self) -> char {
         match self {
             Self::Spades => '♠',
@@ -91,6 +104,32 @@ pub fn shuffled_deck(seed: u64) -> Vec<Card> {
     deck
 }
 
+/// `decks` full 52-card decks shuffled together with `seed`.
+///
+/// Deliberately not written in terms of [`shuffled_deck`], nor it in terms of
+/// this: the test that the two agree for one deck is what says no existing
+/// seed's deal moved when two-deck games arrived, and it is only worth
+/// anything while they are two pieces of code that could disagree.
+///
+/// With more than one deck a `Card` value no longer names a single card —
+/// `Card` derives `Eq` and `Hash`, so anything counting cards needs a multiset
+/// rather than a set.
+pub fn shuffled_decks(seed: u64, decks: usize) -> Vec<Card> {
+    let mut deck: Vec<Card> = (0..decks)
+        .flat_map(|_| {
+            Suit::ALL
+                .iter()
+                .flat_map(|&suit| (ACE..=KING).map(move |rank| Card::new(rank, suit)))
+        })
+        .collect();
+
+    let mut rng = SplitMix64::new(seed);
+    for i in (1..deck.len()).rev() {
+        deck.swap(i, rng.below(i as u64 + 1) as usize);
+    }
+    deck
+}
+
 /// Vigna's splitmix64. Tiny, well-distributed, and stable across releases.
 struct SplitMix64 {
     state: u64,
@@ -142,6 +181,57 @@ mod tests {
     fn shuffle_is_seed_stable() {
         assert_eq!(shuffled_deck(7), shuffled_deck(7));
         assert_ne!(shuffled_deck(7), shuffled_deck(8));
+    }
+
+    #[test]
+    fn every_suit_is_its_own_index() {
+        for suit in Suit::ALL {
+            assert_eq!(Suit::ALL[suit.index()], suit);
+        }
+    }
+
+    #[test]
+    fn one_deck_shuffled_as_decks_is_the_deck() {
+        // The assertion that says two-deck games arrived without moving a
+        // single existing seed's deal. It is worth having only because the
+        // two functions are written separately.
+        for seed in [0, 1, 42, 2024, u64::MAX] {
+            assert_eq!(shuffled_decks(seed, 1), shuffled_deck(seed));
+        }
+    }
+
+    #[test]
+    fn two_decks_hold_every_card_twice() {
+        let deck = shuffled_decks(9, 2);
+        assert_eq!(deck.len(), 104);
+
+        // A `HashSet` would say 52 here and pass just as happily if half the
+        // cards were missing, so count the multiset instead.
+        let mut census: Vec<(usize, u8)> = deck
+            .iter()
+            .map(|card| (card.suit.index(), card.rank))
+            .collect();
+        census.sort_unstable();
+        for suit in Suit::ALL {
+            for rank in ACE..=KING {
+                let held = census
+                    .iter()
+                    .filter(|&&c| c == (suit.index(), rank))
+                    .count();
+                assert_eq!(held, 2, "{}", Card::new(rank, suit));
+            }
+        }
+    }
+
+    #[test]
+    fn a_multi_deck_shuffle_is_seed_stable() {
+        assert_eq!(shuffled_decks(7, 2), shuffled_decks(7, 2));
+        assert_ne!(shuffled_decks(7, 2), shuffled_decks(8, 2));
+    }
+
+    #[test]
+    fn no_decks_is_no_cards() {
+        assert!(shuffled_decks(7, 0).is_empty());
     }
 
     #[test]

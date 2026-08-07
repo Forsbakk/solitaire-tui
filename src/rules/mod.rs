@@ -11,6 +11,8 @@
 pub mod klondike;
 pub mod russian;
 pub mod scorpion;
+pub mod spider;
+pub mod spiderette;
 pub mod yukon;
 
 use crate::board::{Action, Board, BoardSpec, Move, MoveError, PileId};
@@ -98,6 +100,18 @@ pub trait Rules {
         None
     }
 
+    /// Why [`Rules::activate`] would not deal the stock, shown when the player
+    /// presses the deal key and nothing happens.
+    ///
+    /// The default assumes the only reason is an exhausted stock, which is
+    /// true of every game whose stock deals whenever it has cards. Override it
+    /// when a full stock can still refuse — Spider will not deal onto an empty
+    /// column, and saying the stock is spent would be a lie.
+    fn stock_refusal(&self, board: &Board) -> &'static str {
+        let _ = board;
+        "The stock has nothing left to give."
+    }
+
     /// Send the exposed card of `from` to wherever it belongs, if it fits.
     fn send_home(&self, board: &Board, from: PileId) -> Option<Action> {
         let _ = (board, from);
@@ -168,6 +182,8 @@ pub fn games() -> Vec<Box<dyn Rules>> {
         Box::new(scorpion::Scorpion),
         Box::new(yukon::Yukon),
         Box::new(russian::Russian),
+        Box::new(spiderette::Spiderette),
+        Box::new(spider::Spider::default()),
     ]
 }
 

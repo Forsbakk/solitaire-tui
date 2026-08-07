@@ -31,7 +31,7 @@ const RECYCLE: &str = " ↻  ";
 /// quietly strip the first entry's indent and leave it hanging in the popup.
 const SHARED_HELP: &str = "  ← →  h l      move between piles
   ↑ ↓  k j      move up and down a pile
-  1 … 9         jump to a tableau pile, or drop there
+  1 … 9  0      jump to a tableau pile, or drop there
   space enter   pick up the card under the cursor, or drop
   esc           put a held card back";
 
@@ -210,7 +210,9 @@ pub fn draw_labels(buffer: &mut Buffer, layout: &BoardLayout, tableau: &[PileId]
         let Some(pile_layout) = layout.pile(pile) else {
             continue;
         };
-        let number = index + 1;
+        // The tenth pile is labelled `0`, because `0` is the key that jumps to
+        // it. Boards with fewer than ten fanned piles are unaffected.
+        let number = (index + 1) % 10;
         let (label, style) = if pile == active {
             (
                 format!("[{number}]"),

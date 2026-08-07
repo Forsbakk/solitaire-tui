@@ -8,9 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cargo run --release                                   # menu, then a game
 cargo run --release -- --game scorpion --seed 42      # skip the menu, fixed deal
 cargo run --release -- --game klondike --rule draw=1  # set a game's rules
+cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck board
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 167 tests
+cargo test                          # all 213 tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
@@ -26,7 +27,7 @@ module it covers.
 
 ```
 main.rs      CLI, terminal, and the menu ⇄ game loop
-card.rs      Card, Suit, shuffled_deck — no game knowledge
+card.rs      Card, Suit, shuffled_deck/shuffled_decks — no game knowledge
 board.rs     Pile, Board, Move, Action/Step, BoardSpec — state, no rules
 rules/       one file per game + the Rules trait and registry
 ui/layout.rs where cards sit; purely geometric
@@ -51,16 +52,22 @@ The short version: implement `Rules` (`src/rules/mod.rs`) and add it to
 `rules::games()`. Required: `name`, `blurb`, `help`, `deal`, `spec`, `check`,
 `is_won`. Everything else is defaulted — notably `suggestions`, which enumerates
 every legal move and sorts by the game's `rank`. Override `activate` (what pressing
-the stock does), `send_home`, `autoplay`, `is_useful`,
-`options`/`configure`/`selected` only as needed.
+the stock does), `stock_refusal` (why it would not), `send_home`, `autoplay`,
+`is_useful`, `options`/`configure`/`selected` only as needed.
 
 `Scorpion` is the minimal example; `Klondike` uses nearly every hook; `Yukon` is a
 foundation game with no stock, and `Russian` is Yukon with one predicate swapped.
+`Spider` is the only game whose actions do more than move cards — a finished
+King-to-Ace run is filed by extra `Step`s appended to the same `Action` — and
+`Spiderette` is Spider with a different `Setup`.
 
-`russian.rs` is the only module that reaches into another game: `yukon.rs` exposes
-its deal, spec, `check`, foundations and heuristic as `pub(super)` functions, and
-`Russian` forwards to them with `Build::SameSuit`. Two games that differ by one
-rule share one implementation; anything more divergent gets its own file.
+`russian.rs` and `spiderette.rs` are the two modules that reach into another game.
+`yukon.rs` exposes its deal, spec, `check`, foundations and heuristic as
+`pub(super)` functions taking a `Build`, and `spider.rs` exposes its half taking a
+`Setup` — decks, suits, and the shape of the deal. In both cases the divergence is
+one named `Copy` type passed as one argument; anything more divergent gets its own
+file. That `spider::check` needs no `Setup` at all is what says the second split is
+honest.
 
 ### `Action` is universal, and only reversible in exact order
 
@@ -82,6 +89,14 @@ if you add a new kind of `Step`, make sure that walk exercises it.
 
 `Board::recycles()` exists solely so a redeal limit survives undo; it moves with
 the `Step.recycle` flag rather than being recomputed.
+
+The rules may also *append* steps to an action. `spider.rs` files a finished
+King-to-Ace run as part of the move that finished it, so the run leaving play is
+one undo and `app.rs` never learns what a run is. Detection needs the post-move
+board, so the extra steps are computed against a scratch clone — each one's flags
+against the state it will actually meet, which is what `undo` assumes. Both
+`action_for` and `activate` have to go through it; dealing a card finishes runs
+too.
 
 ### The layout is the single source of truth for board shape
 
@@ -153,6 +168,12 @@ Every "is this face up" question goes through `Pile::is_face_up`.
 
 `shuffled_deck` uses a hand-rolled splitmix64 rather than `rand` so a given
 `--seed` deals the same game permanently. Do not swap it for `rand`.
+
+`shuffled_decks(seed, decks)` is written separately rather than as a
+generalisation, so that `shuffled_decks(seed, 1) == shuffled_deck(seed)` is a real
+assertion between two pieces of code that could disagree. That test is what says
+two-deck games arrived without moving a single existing deal; keep both functions
+rather than folding one into the other.
 
 Tests depend on the concrete deal for a seed — `the_deal_is_pinned_to_its_seed` in
 each rules module, plus app tests that pick `K♦`, `9♣`, `10♣`, `Q♦` out of
