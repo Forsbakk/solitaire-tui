@@ -121,3 +121,7 @@ resolved against it, so a click can never disagree with what is on screen.
 The shuffle is a small built-in splitmix64 rather than the `rand` crate, so a
 given `--seed` deals the same game permanently instead of changing under a
 dependency upgrade.
+
+Other solitaire variants that could be added later, and what each would cost
+against the code as it stands, are sketched in
+[`docs/future-games.md`](docs/future-games.md).
