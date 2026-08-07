@@ -10,6 +10,6 @@ pkgbase = solitaire-tui
 	depends = gcc-libs
 	depends = glibc
 	source = solitaire-tui-0.2.0.tar.gz::https://github.com/Forsbakk/solitaire-tui/archive/refs/tags/v0.2.0.tar.gz
-	sha256sums = 0000000000000000000000000000000000000000000000000000000000000000
+	sha256sums = 4016b69d4ef0367d22c9c81ba4597ecccef2164b8facae536ad7b6c3228bbcaf
 
 pkgname = solitaire-tui

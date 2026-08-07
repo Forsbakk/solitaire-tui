@@ -9,8 +9,8 @@ pkgbase = solitaire-tui-bin
 	provides = solitaire-tui=0.2.0
 	conflicts = solitaire-tui
 	source_x86_64 = solitaire-tui-bin-0.2.0-x86_64.tar.gz::https://github.com/Forsbakk/solitaire-tui/releases/download/v0.2.0/solitaire-tui-v0.2.0-x86_64-unknown-linux-musl.tar.gz
-	sha256sums_x86_64 = 0000000000000000000000000000000000000000000000000000000000000000
+	sha256sums_x86_64 = 3e0bb77596afb23a9b82b35aabfadfd27e1faa854702502443cd007ca0e71cc6
 	source_aarch64 = solitaire-tui-bin-0.2.0-aarch64.tar.gz::https://github.com/Forsbakk/solitaire-tui/releases/download/v0.2.0/solitaire-tui-v0.2.0-aarch64-unknown-linux-musl.tar.gz
-	sha256sums_aarch64 = 0000000000000000000000000000000000000000000000000000000000000000
+	sha256sums_aarch64 = 1ee36f639964ac40721343618d3f480d7a3c12fb8cf6a5316956c695fa773bc9
 
 pkgname = solitaire-tui-bin
