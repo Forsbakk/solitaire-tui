@@ -1,5 +1,7 @@
 # solitaire
 
+[![ci](https://github.com/Forsbakk/solitaire-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/Forsbakk/solitaire-tui/actions/workflows/ci.yml)
+
 Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Six games so
 far — Klondike, Scorpion, Yukon, Russian Solitaire, Spiderette and Spider —
 chosen from a menu at startup.
@@ -48,15 +50,19 @@ beside it, and the four foundations waiting:
 
 ## Installing
 
-Needs Rust 1.88 or newer. There are no system dependencies — the whole thing is
-three pure-Rust crates.
+Prebuilt binaries for Linux, Windows and macOS are on the
+[releases page](https://github.com/Forsbakk/solitaire-tui/releases). There is
+nothing to install alongside them — download, extract, run. The Linux builds are
+statically linked, so they do not care which distro they land on.
+
+To build it yourself instead, with Rust 1.88 or newer:
 
 ```sh
 cargo install --git https://github.com/Forsbakk/solitaire-tui
 ```
 
-That puts a `solitaire` binary in `~/.cargo/bin`. To work on it instead, clone
-the repository and use `cargo run` as below.
+That puts a `solitaire` binary in `~/.cargo/bin`. To work on it, clone the
+repository and use `cargo run` as below.
 
 Any terminal with 256 colours and a font covering `♠ ♥ ♦ ♣` will do. On Windows
 use Windows Terminal rather than the legacy console host, which cannot render

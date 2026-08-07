@@ -19,9 +19,27 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-The directory is `solitaire-tui`; the crate and binary are `solitaire`. There is
-no integration test directory — every test is a `#[cfg(test)] mod tests` inside the
-module it covers.
+The directory and crate are `solitaire-tui` (`solitaire` was taken on crates.io);
+the binary is `solitaire`, via an explicit `[[bin]]`. There is no integration test
+directory — every test is a `#[cfg(test)] mod tests` inside the module it covers.
+
+## Releasing
+
+`.github/workflows/ci.yml` runs the suite on Linux, Windows and macOS, plus
+clippy, rustfmt and a `cargo check` against the declared MSRV. Bump
+`rust-version` only alongside the dependency that forced it — the msrv job is
+what keeps that field honest.
+
+Pushing a `v*` tag builds five targets and uploads them to a GitHub release:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+macOS binaries must be built on macOS runners — Apple Silicon will not run an
+unsigned binary, and only the native linker ad-hoc signs it. Nothing is
+notarized or code-signed beyond that, so browser-downloaded builds trip Gatekeeper
+and SmartScreen.
 
 ## Architecture
 
