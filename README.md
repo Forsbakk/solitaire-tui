@@ -46,6 +46,22 @@ beside it, and the four foundations waiting:
                                           └────┘
 ```
 
+## Installing
+
+Needs Rust 1.88 or newer. There are no system dependencies — the whole thing is
+three pure-Rust crates.
+
+```sh
+cargo install --git https://github.com/Forsbakk/solitaire-tui
+```
+
+That puts a `solitaire` binary in `~/.cargo/bin`. To work on it instead, clone
+the repository and use `cargo run` as below.
+
+Any terminal with 256 colours and a font covering `♠ ♥ ♦ ♣` will do. On Windows
+use Windows Terminal rather than the legacy console host, which cannot render
+the box-drawing and suit characters the board is made of.
+
 ## Playing
 
 ```sh
@@ -275,3 +291,14 @@ resolved against it, so a click can never disagree with what is on screen.
 The shuffle is a small built-in splitmix64 rather than the `rand` crate, so a
 given `--seed` deals the same game permanently instead of changing under a
 dependency upgrade.
+
+## License
+
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. Unless you state otherwise, any contribution you intentionally
+submit for inclusion in this crate shall be dual-licensed as above, without any
+additional terms or conditions.

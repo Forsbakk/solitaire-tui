@@ -1,9 +1,30 @@
 [package]
-name = "solitaire"
+name = "solitaire-tui"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+authors = ["Jonas Forsbakk <jonas@forsbakk.priv.no>"]
+description = "Six solitaire games in the terminal — Klondike, Scorpion, Yukon, Russian, Spiderette and Spider"
+repository = "https://github.com/Forsbakk/solitaire-tui"
+homepage = "https://github.com/Forsbakk/solitaire-tui"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["solitaire", "tui", "game", "cards", "ratatui"]
+categories = ["games", "command-line-utilities"]
+exclude = ["CLAUDE.md", ".github/"]
+
+# The crate is `solitaire-tui` because `solitaire` was already taken on
+# crates.io; the binary keeps the shorter name.
+[[bin]]
+name = "solitaire"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.5", features = ["derive"] }
 ratatui = "0.30.2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
