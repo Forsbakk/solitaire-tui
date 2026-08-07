@@ -58,7 +58,7 @@ did not.
 
 ## Note on the binary name
 
-Both packages install `/usr/bin/solitaire`, which collides with the AUR's
-`solitaire` (GNOME's patience game), so both declare `conflicts=('solitaire')`.
-Neither declares `provides`, since this is unrelated software and should not
-satisfy a dependency on it.
+Both packages install `/usr/bin/solitaire-tui`. The binary was called
+`solitaire` up to 0.1.0, which collided with the AUR's `solitaire` (GNOME's
+patience game); the rename in 0.2.0 is what removed the need for a
+`conflicts=('solitaire')` on both packages.

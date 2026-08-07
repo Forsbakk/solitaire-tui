@@ -19,9 +19,10 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-The directory and crate are `solitaire-tui` (`solitaire` was taken on crates.io);
-the binary is `solitaire`, via an explicit `[[bin]]`. There is no integration test
-directory — every test is a `#[cfg(test)] mod tests` inside the module it covers.
+The directory, crate and binary are all `solitaire-tui` (`solitaire` was taken on
+crates.io, and `/usr/bin/solitaire` collides with GNOME's patience game on Arch).
+There is no integration test directory — every test is a `#[cfg(test)] mod tests`
+inside the module it covers.
 
 ## Releasing
 

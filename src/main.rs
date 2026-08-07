@@ -20,7 +20,7 @@ use rules::Rules;
 
 #[derive(Parser)]
 #[command(
-    name = "solitaire",
+    name = "solitaire-tui",
     version,
     about = "Solitaire in the terminal",
     after_help = "With no --game, the menu opens so a game can be picked there."

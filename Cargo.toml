@@ -1,6 +1,6 @@
 [package]
 name = "solitaire-tui"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 authors = ["Jonas Forsbakk <jonas@forsbakk.priv.no>"]
@@ -12,12 +12,6 @@ readme = "README.md"
 keywords = ["solitaire", "tui", "game", "cards", "ratatui"]
 categories = ["games", "command-line-utilities"]
 exclude = ["CLAUDE.md", ".github/"]
-
-# The crate is `solitaire-tui` because `solitaire` was already taken on
-# crates.io; the binary keeps the shorter name.
-[[bin]]
-name = "solitaire"
-path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"

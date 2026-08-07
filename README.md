@@ -68,8 +68,8 @@ Or with Rust 1.88 or newer, from crates.io:
 cargo install solitaire-tui
 ```
 
-Either way the binary is called `solitaire`. To work on it, clone the repository
-and use `cargo run` as below.
+Either way the binary is called `solitaire-tui`. To work on it, clone the
+repository and use `cargo run` as below.
 
 Any terminal with 256 colours and a font covering `♠ ♥ ♦ ♣` will do. On Windows
 use Windows Terminal rather than the legacy console host, which cannot render

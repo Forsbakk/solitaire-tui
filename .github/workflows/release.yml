@@ -57,7 +57,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
-          bin: solitaire
+          bin: solitaire-tui
           target: ${{ matrix.target }}
           # .tar.gz everywhere, .zip on Windows — the action's default.
           archive: $bin-$tag-$target

@@ -1,6 +1,6 @@
 pkgbase = solitaire-tui
 	pkgdesc = Six solitaire games in the terminal, built with ratatui
-	pkgver = 0.1.0
+	pkgver = 0.2.0
 	pkgrel = 1
 	url = https://github.com/Forsbakk/solitaire-tui
 	arch = x86_64
@@ -9,8 +9,7 @@ pkgbase = solitaire-tui
 	makedepends = cargo
 	depends = gcc-libs
 	depends = glibc
-	conflicts = solitaire
-	source = solitaire-tui-0.1.0.tar.gz::https://github.com/Forsbakk/solitaire-tui/archive/refs/tags/v0.1.0.tar.gz
-	sha256sums = b7d4ef9e31799893793f22cc62d54862c3159d1df7e1a0144a2fc248a2db4874
+	source = solitaire-tui-0.2.0.tar.gz::https://github.com/Forsbakk/solitaire-tui/archive/refs/tags/v0.2.0.tar.gz
+	sha256sums = 0000000000000000000000000000000000000000000000000000000000000000
 
 pkgname = solitaire-tui

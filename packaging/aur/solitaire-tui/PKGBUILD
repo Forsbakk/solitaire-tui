@@ -1,7 +1,7 @@
 # Maintainer: Jonas Forsbakk <jonas@forsbakk.priv.no>
 
 pkgname=solitaire-tui
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Six solitaire games in the terminal, built with ratatui'
 arch=('x86_64' 'aarch64')
@@ -9,12 +9,9 @@ url='https://github.com/Forsbakk/solitaire-tui'
 license=('MIT OR Apache-2.0')
 depends=('gcc-libs' 'glibc')
 makedepends=('cargo')
-# The AUR's `solitaire` (GNOME's patience game) installs /usr/bin/solitaire as
-# well, so the two genuinely cannot coexist. It is different software, though,
-# so this does not `provide` it.
-conflicts=('solitaire')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('b7d4ef9e31799893793f22cc62d54862c3159d1df7e1a0144a2fc248a2db4874')
+# Regenerate after tagging: makepkg -g -p packaging/aur/solitaire-tui/PKGBUILD
+sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
 
 prepare() {
   cd "$pkgname-$pkgver"
@@ -37,8 +34,7 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  # The crate is solitaire-tui; the binary it installs is solitaire.
-  install -Dm0755 -t "$pkgdir/usr/bin/" target/release/solitaire
+  install -Dm0755 -t "$pkgdir/usr/bin/" target/release/solitaire-tui
   install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE-MIT LICENSE-APACHE
   install -Dm0644 -t "$pkgdir/usr/share/doc/$pkgname/" README.md
 }
