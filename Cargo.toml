@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["solitaire", "tui", "game", "cards", "ratatui"]
 categories = ["games", "command-line-utilities"]
-exclude = ["CLAUDE.md", ".github/"]
+exclude = ["CLAUDE.md", ".github/", "docs/"]
 
 # The crate is `solitaire-tui` because `solitaire` was already taken on
 # crates.io; the binary keeps the shorter name.
