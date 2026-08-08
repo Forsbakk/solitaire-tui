@@ -36,7 +36,8 @@ const SHARED_HELP: &str = "  ← →  h l      move between piles
   ↑ ↓  k j      move up and down a pile
   1 … 9  0      jump to a tableau pile, or drop there
   space enter   pick up the card under the cursor, or drop
-  esc           put a held card back";
+  esc           put a held card back
+  f             play the card home, or onto its only column";
 
 const SHARED_HELP_TAIL: &str = "  H             suggest a move; press again for the next one
   u  ctrl-r     undo / redo
@@ -517,10 +518,12 @@ pub fn draw_status(
         Span::styled(message, Style::new().fg(color))
     } else if let Some((pile, index)) = focus.selection {
         let held = board.pile(pile).len() - index;
-        // A card that has a foundation waiting can be sent there without
-        // hunting for which one, so say so rather than leaving it to the help.
+        // A card with only one place to go can be played without hunting for
+        // which pile that is, so say so rather than leaving it to the help.
         let home = if held == 1 && rules.send_home(board, pile).is_some() {
             ", or f to send it home"
+        } else if rules.only_move(board, pile, index).is_some() {
+            ", or f to play it"
         } else {
             ""
         };
@@ -748,6 +751,14 @@ mod tests {
             let text = help_text(game.as_ref());
             assert!(text.contains("undo / redo"), "{}", game.name());
             assert!(text.contains("back to the menu"), "{}", game.name());
+            // `f` works in every game now, so it is listed once, by the shared
+            // block — a game repeating it would print it twice.
+            assert_eq!(
+                text.matches("  f  ").count(),
+                1,
+                "{} lists f once:\n{text}",
+                game.name()
+            );
             for line in game.help().lines() {
                 assert!(text.contains(line), "{} lost {line:?}", game.name());
             }

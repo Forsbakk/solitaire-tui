@@ -198,10 +198,9 @@ pub(super) fn status(board: &Board) -> Vec<StatusItem> {
     )]
 }
 
-/// The keys Yukon and Russian Solitaire add. Neither has a stock, so `d` is not
-/// among them.
-pub(super) const HELP: &str = "  f             send a card home, held or under the cursor\n\
-                               \x20 A             finish the game once every card is free";
+/// The key Yukon and Russian Solitaire add. Neither has a stock, so `d` is not
+/// among them, and `f` is shared with every other game.
+pub(super) const HELP: &str = "  A             finish the game once every card is free";
 
 #[derive(Default)]
 pub struct Yukon;

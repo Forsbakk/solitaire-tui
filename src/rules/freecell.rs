@@ -336,11 +336,10 @@ pub(super) fn status(board: &Board) -> Vec<StatusItem> {
     ]
 }
 
-/// The keys FreeCell adds. There is no stock, so `d` is not among them. How
-/// many cards may travel together is a rule rather than a key, so it lives in
-/// the blurb.
-pub(super) const HELP: &str = "  f             send a card home, held or under the cursor\n\
-                               \x20 A             finish a board that is already in order";
+/// The key FreeCell adds. There is no stock, so `d` is not among them, and `f`
+/// is shared with every other game. How many cards may travel together is a
+/// rule rather than a key, so it lives in the blurb.
+pub(super) const HELP: &str = "  A             finish a board that is already in order";
 
 #[derive(Default)]
 pub struct FreeCell;
