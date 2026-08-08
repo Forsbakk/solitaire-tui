@@ -8,6 +8,7 @@
 //! every legal move and ranks it with [`Rules::rank`], which is enough for any
 //! game that does not need to think harder than that.
 
+pub mod freecell;
 pub mod klondike;
 pub mod russian;
 pub mod scorpion;
@@ -16,6 +17,29 @@ pub mod spiderette;
 pub mod yukon;
 
 use crate::board::{Action, Board, BoardSpec, Move, MoveError, PileId};
+use crate::card::Card;
+
+/// How a tableau card may be covered — the one rule that separates Yukon from
+/// Russian Solitaire, and FreeCell from Baker's Game.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Build {
+    AlternatingColour,
+    SameSuit,
+}
+
+impl Build {
+    /// Whether `head` may land on `target`.
+    ///
+    /// A King's rank + 1 is 14, so no card ever satisfies this against one —
+    /// which is what confines Kings to empty piles in the games that say so.
+    pub(crate) fn accepts(self, target: Card, head: Card) -> bool {
+        target.rank == head.rank + 1
+            && match self {
+                Self::AlternatingColour => target.suit.is_red() != head.suit.is_red(),
+                Self::SameSuit => target.suit == head.suit,
+            }
+    }
+}
 
 /// A rule the player can change before dealing, shown in the menu's preview
 /// pane. The game stores which value is selected and reads it when dealing.
@@ -179,6 +203,7 @@ pub trait Rules {
 pub fn games() -> Vec<Box<dyn Rules>> {
     vec![
         Box::new(klondike::Klondike::default()),
+        Box::new(freecell::FreeCell),
         Box::new(scorpion::Scorpion),
         Box::new(yukon::Yukon),
         Box::new(russian::Russian),

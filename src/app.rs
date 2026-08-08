@@ -558,6 +558,11 @@ impl Session {
             // An empty foundation is not "an empty pile" in the sense the
             // player means — saying so would read as an empty column.
             (None, PileKind::Foundation) => format!("hint {position}/{count}: {card} home"),
+            // Nor is an empty cell: parking a card is not the same suggestion
+            // as filling a column with it.
+            (None, PileKind::FreeCell) => {
+                format!("hint {position}/{count}: {card} to a free cell")
+            }
             (None, _) => format!("hint {position}/{count}: {card} to an empty pile"),
         };
         self.tone = Tone::Hint;
@@ -1057,6 +1062,25 @@ mod tests {
         assert!(target.is_empty());
         assert!(
             session.message.ends_with(" home"),
+            "got {:?}",
+            session.message
+        );
+    }
+
+    #[test]
+    fn a_hint_onto_an_empty_free_cell_says_free_cell() {
+        // An empty cell is not "an empty pile" either: parking a card there is
+        // a different suggestion from dropping it into an empty column, and
+        // this board offers both.
+        let mut session = Session::new(Box::new(crate::rules::freecell::FreeCell), 0);
+        session.board = crate::rules::freecell::tests_support::a_card_worth_parking();
+        press(&mut session, KeyCode::Char('H'));
+
+        let target = session.board.pile(session.hint.expect("a hint").to);
+        assert_eq!(target.kind(), PileKind::FreeCell);
+        assert!(target.is_empty());
+        assert!(
+            session.message.ends_with(" to a free cell"),
             "got {:?}",
             session.message
         );

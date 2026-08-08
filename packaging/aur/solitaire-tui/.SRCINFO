@@ -1,5 +1,5 @@
 pkgbase = solitaire-tui
-	pkgdesc = Six solitaire games in the terminal, built with ratatui
+	pkgdesc = Seven solitaire games in the terminal, built with ratatui
 	pkgver = 0.2.0
 	pkgrel = 1
 	url = https://github.com/Forsbakk/solitaire-tui

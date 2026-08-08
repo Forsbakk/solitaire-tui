@@ -2,19 +2,19 @@
 
 [![ci](https://github.com/Forsbakk/solitaire-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/Forsbakk/solitaire-tui/actions/workflows/ci.yml)
 
-Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Six games so
-far — Klondike, Scorpion, Yukon, Russian Solitaire, Spiderette and Spider —
-chosen from a menu at startup.
+Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Seven games
+so far — Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette and
+Spider — chosen from a menu at startup.
 
 ```
 ╭ Games ─────────────╮╭ Klondike ────────────────────────────────────────╮
 │ ▸ Klondike         ││ Build the tableau down in alternating colour,    │
-│   Scorpion         ││ moving ordered runs as a unit. Only a King may   │
-│   Yukon            ││ take an empty pile.                              │
-│   Russian          ││                                                  │
-│   Spiderette       ││ Turn the stock for more cards, and build the     │
-│   Spider           ││ four foundations up in suit from the Ace. Win by │
-│                    ││ sending all 52 cards home.                       │
+│   FreeCell         ││ moving ordered runs as a unit. Only a King may   │
+│   Scorpion         ││ take an empty pile.                              │
+│   Yukon            ││                                                  │
+│   Russian          ││ Turn the stock for more cards, and build the     │
+│   Spiderette       ││ four foundations up in suit from the Ace. Win by │
+│   Spider           ││ sending all 52 cards home.                       │
 │                    ││                                                  │
 │                    ││ Rules                                            │
 │                    ││   Draw      ‹ 3 ›                                │
@@ -125,6 +125,49 @@ are the stock.
 
 Rules you can change: **Draw** (3 or 1) and **Redeals** (unlimited, 3, or none).
 
+### FreeCell
+
+Eight columns — four of seven cards and four of six — every one of them face up.
+There is no stock, and nothing is ever hidden, so `--seed 42` names a puzzle
+rather than a gamble, and nearly every deal can be won.
+
+```
+┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
+│free│ │free│ │free│ │free│ │    │ │    │ │    │ │    │
+└────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘
+ [1]     2      3      4      5      6      7      8
+┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
+│ 7♠ │ │ K♥ │ │ 6♦ │ │ 2♠ │ │ 4♦ │ │ 7♣ │ │ 5♦ │ │ 3♠ │
+├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤
+│ 3♦ │ │10♥ │ │ 5♥ │ │ 8♦ │ │ 3♥ │ │ 3♣ │ │ 6♠ │ │ 9♦ │
+├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤
+│ K♠ │ │ 5♠ │ │ 2♥ │ │ 8♠ │ │10♦ │ │ 8♥ │ │ Q♣ │ │ Q♦ │
+├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤
+│ A♣ │ │ 8♣ │ │ 5♣ │ │ 4♥ │ │ J♣ │ │ Q♥ │ │ 9♥ │ │ 9♠ │
+├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤
+│ 2♣ │ │ J♦ │ │ 6♥ │ │ 7♦ │ │ 4♠ │ │ 9♣ │ │ J♥ │ │ J♠ │
+├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤ ├────┤
+│ A♠ │ │ 2♦ │ │ A♥ │ │ K♣ │ │ 6♣ │ │ K♦ │ │ Q♠ │ │10♠ │
+╔════╗ ├────┤ ├────┤ ├────┤ └────┘ └────┘ └────┘ └────┘
+║ A♦ ║ │ 4♣ │ │ 7♥ │ │10♣ │
+╚════╝ └────┘ └────┘ └────┘
+```
+
+* Build the tableau **down in alternating colour** — a red 9 onto a black 10.
+* **Any** card may take an empty column. This is the one place the game is
+  kinder than Klondike, and empty columns are the thing worth playing for.
+* The four boxes marked `free` are the **free cells**. Each holds a single card,
+  which stays in play and can be brought back out at any time.
+* A run in order **moves as a unit**, as far as there is room to shuffle it
+  across: one card, doubled for every free cell and every empty column, not
+  counting the column it is landing on. Anything longer is refused — but it can
+  still be moved a card at a time, which is all the refusal really means.
+* The four **foundations** build up in suit from the Ace, and a card may be
+  taken back off one. `f` sends the card you are holding, or the one under the
+  cursor, to the foundation that will take it — from a column or from a cell.
+* Win by sending all 52 cards home. Once every column runs down in rank, the
+  rest is bookkeeping and `A` plays it out.
+
 ### Scorpion
 
 Seven columns of seven cards. The first four columns start with three cards face
@@ -214,8 +257,8 @@ the same board at all three difficulties.
 | `space` `enter` | pick up the card under the cursor, or drop what you hold |
 | `esc` | put a held card back |
 | `d` | turn or deal the stock (Klondike, Scorpion, Spiderette, Spider) |
-| `f` | send a card to its foundation — the one held, or under the cursor (Klondike, Yukon, Russian) |
-| `A` | play out a decided game (Klondike, Yukon, Russian) |
+| `f` | send a card to its foundation — the one held, or under the cursor (Klondike, FreeCell, Yukon, Russian) |
+| `A` | play out a decided game (Klondike, FreeCell, Yukon, Russian) |
 | `H` | suggest a move; press again for the next one |
 | `u` / `ctrl-r` | undo / redo |
 | `n` / `r` | new game / replay this deal |
@@ -254,7 +297,8 @@ line (`hint 2/5`) tells you how many there are.
 
 The ranking is a heuristic, not a solver. Each game supplies its own: they all
 prefer moves that turn a card face up, the foundation games then favour sending
-cards home, Klondike also favours clearing the waste, the Spider games favour
+cards home, Klondike also favours clearing the waste, FreeCell favours emptying
+a cell or a column and dislikes filling either, the Spider games favour
 finishing a run and landing in suit and dislike splitting a suited run apart, and
 none of them will offer
 the legal-but-useless move of sliding a whole pile into an empty one. No game

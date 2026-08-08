@@ -1,7 +1,7 @@
 # Future games
 
-The crate plays Klondike, Scorpion, Yukon, Russian Solitaire, Spiderette and Spider, and a
-variant is now one file in `src/rules/` plus a line in `rules::games()`. So the question is
+The crate plays Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette and
+Spider, and a variant is now one file in `src/rules/` plus a line in `rules::games()`. So the question is
 no longer "what would it take to support a second game" but simply which games are worth
 adding and what each still needs from the shared code. This file is a candidate list, not a
 commitment. Entries are grouped by cost.
@@ -25,14 +25,17 @@ commitment. Entries are grouped by cost.
 | Foundations, stock, waste, draw/recycle, send-home, autoplay | `src/rules/klondike.rs` | As worked examples, not as shared code |
 | Per-game rule options in the menu and on the CLI | `src/rules/mod.rs`, `src/ui/menu.rs` | Yes — declare `OptionSpec`s and read `selected()` |
 | A free-tail lift onto foundations, with no stock at all | `src/rules/yukon.rs` | Yes — `pub(super)` functions, already shared with `russian.rs` |
-| Two games differing by one predicate, in two files | `src/rules/yukon.rs`, `src/rules/russian.rs` | Yes, as the pattern to copy |
+| `PileKind::FreeCell` — a pile holding exactly one card | `src/board.rs`, `src/rules/freecell.rs` | Yes, and as the pattern for any new pile kind |
+| A move-size limit the app cannot know about, enforced in `check` | `src/rules/freecell.rs` `capacity` | Yes — selection is never capped by `app.rs` |
+| A board with nothing face down, and an `autoplay` gate to match | `src/rules/freecell.rs` `is_decided` | Yes, and required: `face_down_count` says nothing there |
+| Two games differing by one predicate, in two files | `src/rules/yukon.rs`, `src/rules/russian.rs` | Yes, as the pattern to copy; `Build` is shared by three games now |
 | Two games differing by three parameters, via one `Setup` struct | `src/rules/spider.rs`, `src/rules/spiderette.rs` | Yes, as the pattern to copy when it is more than a predicate |
 | Cards leaving play — steps appended to the move's own `Action` | `src/rules/spider.rs` `with_filing` | Yes, as the pattern to copy |
 | A stock that deals onto every column at once, repeatedly | `src/rules/spider.rs` | Yes |
 | A board ten columns wide, with `0` as the tenth shortcut | `src/rules/spider.rs`, `src/app.rs` | Yes — `board_width` sizes it at 69 cells |
 
-What still does not exist: `PileKind::FreeCell` and `PileKind::Reserve` (deliberately not
-added until a game needs them), non-row board geometry, and scoring.
+What still does not exist: `PileKind::Reserve` (deliberately not added until a game needs
+it), non-row board geometry, and scoring.
 
 ## Tier 1 — Scorpion's own rules, near-free
 
@@ -83,27 +86,26 @@ four.
 
 ## Tier 2 — a new pile kind each
 
-### FreeCell
+### FreeCell — shipped
 
-Eight columns, all face up from the start, four **free cells** each holding one card, four
-foundations. Build down in alternating colour. Nothing is hidden and nearly every deal is
-winnable.
+`src/rules/freecell.rs`. It cost what this file predicted: `PileKind::FreeCell`, four
+`Fan::None` slots beside the foundations, and the `(free cells + 1) × (empty columns + 1)`
+limit in `check`. Three things were worth more than they looked:
 
-*Why it is worth adding.* It fits this project's determinism story better than anything
-else here. Because no card is face down, a deal is a pure puzzle — `--seed` stops being a
-way to replay a game and becomes a shareable puzzle number, and a loss is the player's
-fault rather than the deal's. The existing splitmix64 guarantee, that a seed deals the same
-game permanently, is exactly the property such a number needs.
+- The limit could only live in `check`. `app.rs` never caps how many cards are picked up,
+  so a game with a move-size rule refuses it where the player's drop and `suggestions` both
+  arrive — and the move stays one `Action::moving`, so a supermove is still one undo.
+- `autoplay` had to be re-derived. Every other game gates on `board.face_down_count() > 0`,
+  which here is permanently zero and would call the opening deal decided. The gate is
+  `is_decided`: every column running down in rank, which makes the lowest card still out
+  reachable and playable. `autoplay` also has to read the cells, or a finish strands cards
+  in them and never wins.
+- A new pile kind is four places, not one: the variant, `check`'s target match,
+  `app.rs::suggest`'s wording for an empty target, and `render::draw_flat`'s marker for an
+  empty pile. Skipping the last two gives a board of identical empty boxes and a hint that
+  calls a cell "an empty pile".
 
-**Cost against today's code**
-- Reuses: foundations, `send_home`, `autoplay` and the two-row spec — from Yukon rather
-  than Klondike, since Yukon is already a foundation game with no stock and its spec is
-  the closer starting point; the hint ranking is more useful here than anywhere else,
-  since FreeCell positions are analysable.
-- Needs: `PileKind::FreeCell` (removed from `board.rs` until a game wants it) plus its own
-  `Fan::None` slots, and — if multi-card moves are supported rather than made one card at
-  a time — the `(free cells + 1) × (empty piles + 1)` limit in `check`.
-- Verdict: the best remaining game, and no longer an expensive one.
+`Build` moved from `yukon.rs` to `rules/mod.rs` on the way, since three games now share it.
 
 ### Baker's Game and Seahaven Towers
 
@@ -113,9 +115,11 @@ two cards already sitting in free cells, and builds down in suit.
 *Why it is worth adding.* Two more games for a predicate and a deal function each.
 
 **Cost against today's code**
-- Reuses: all of FreeCell.
-- Needs: build predicates and deals.
-- Verdict: near-free once FreeCell lands.
+- Reuses: all of FreeCell, whose half is already `pub(super)` and already takes a `Build`.
+- Needs: Baker's Game is `russian.rs` with `Build::SameSuit` — a file of forwarding methods.
+  Seahaven diverges in the deal and the spec as well as the predicate, so it wants a `Copy`
+  `Setup` in the `spiderette.rs` mould rather than a second argument threaded everywhere.
+- Verdict: Baker's Game is an afternoon; Seahaven is a day.
 
 ### Canfield
 
@@ -199,16 +203,17 @@ direction from Scorpion — very wide and very short rather than narrow and deep
 Most of the shared work the earlier tiers called for is now done. What a future game might
 still need from the common code, roughly in the order the games above want it:
 
-1. **`PileKind::FreeCell` and `PileKind::Reserve`** — removed from `board.rs` on purpose,
-   so they arrive with the game that needs them. (FreeCell, Canfield)
+1. **`PileKind::Reserve`** — removed from `board.rs` on purpose, so it arrives with the
+   game that needs it. `PileKind::FreeCell` arrived with FreeCell exactly that way, and the
+   four places it touched are listed under that entry. (Canfield)
 2. **Foundations that do not start at Ace** — a base rank and wrapping rank comparisons.
    (Canfield)
 3. **Non-row geometry and non-drag interactions.** The layout models rows of slots; a
    triangle is not one, and Pyramid's "pick two cards" is not the pick-up-and-drop gesture
    `app.rs` implements. (TriPeaks, Pyramid, Accordion)
 
-The multi-deck shuffle and cards leaving play were the first two entries here until Spider
-shipped both. What that cost is worth knowing before the next such mechanic: the shuffle
+A pile kind of its own was the first entry here until FreeCell shipped it. The multi-deck
+shuffle and cards leaving play were the two before that, until Spider shipped both. What that cost is worth knowing before the next such mechanic: the shuffle
 was six lines and one assertion (`shuffled_decks(seed, 1) == shuffled_deck(seed)`, which is
 what let two decks arrive without moving a single existing deal), and cards leaving play
 turned out to need no new shared code at all — a finished run is filed by extra `Step`s
@@ -225,10 +230,8 @@ would be most at risk of quietly breaking, and the round-trip tests in `ui/layou
 
 ## A suggested order
 
-**FreeCell next**, for the reason it was always worth having: nothing is face down, so a
-deal is a pure puzzle and `--seed` becomes a shareable puzzle number rather than just a
-replay. The determinism guarantee in `card.rs` is exactly the property such a number needs.
-Baker's Game and Seahaven follow it almost for free.
+**Baker's Game next**, now that FreeCell has shipped and left its half `pub(super)` behind
+a `Build` argument. Seahaven Towers after it, for one `Setup` more.
 
 **Wasp and Three Blind Mice** any time — they are afternoon projects, and good first
 exercises for anyone learning the `Rules` trait.

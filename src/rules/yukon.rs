@@ -13,12 +13,12 @@
 //! * You win when all 52 cards are home.
 //!
 //! Russian Solitaire is this game built in suit instead of alternating colour,
-//! so everything here but the [`Build`] predicate is shared with
+//! so everything here but the [`Build`](super::Build) predicate is shared with
 //! [`super::russian`].
 
 use crate::board::{Action, Board, BoardSpec, Fan, Move, MoveError, Pile, PileId, PileKind, Spot};
 use crate::card::{ACE, Card, KING, shuffled_deck};
-use crate::rules::{Rules, StatusItem, StatusTone};
+use crate::rules::{Build, Rules, StatusItem, StatusTone};
 
 const TABLEAU: usize = 7;
 const FOUNDATIONS: usize = 4;
@@ -28,28 +28,6 @@ const FACE_UP_PER_PILE: usize = 5;
 const FOUNDATION: PileId = TABLEAU;
 /// Cards in a deck, and so what a full set of foundations holds.
 const DECK: usize = 52;
-
-/// How a tableau card may be covered — the one rule that separates Yukon from
-/// Russian Solitaire.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Build {
-    AlternatingColour,
-    SameSuit,
-}
-
-impl Build {
-    /// Whether `head` may land on `target`.
-    ///
-    /// A King's rank + 1 is 14, so no card ever satisfies this against one —
-    /// which is what confines Kings to empty piles.
-    pub(super) fn accepts(self, target: Card, head: Card) -> bool {
-        target.rank == head.rank + 1
-            && match self {
-                Self::AlternatingColour => target.suit.is_red() != head.suit.is_red(),
-                Self::SameSuit => target.suit == head.suit,
-            }
-    }
-}
 
 // -- shared with `russian` -------------------------------------------------
 //

@@ -22,6 +22,9 @@ const BACK_FACE: &str = "▞▞▞▞";
 const CARET: &str = "▶";
 /// Shown on an empty stock that can still be refilled from the waste.
 const RECYCLE: &str = " ↻  ";
+/// Shown on an empty free cell, which otherwise reads as one more empty box in
+/// a row of them.
+const FREE_CELL: &str = "free";
 
 /// Keys that mean the same thing in every game. A game's own `help` adds to
 /// this rather than repeating it.
@@ -268,9 +271,13 @@ fn draw_flat(
     let pile = board.pile(layout.pile);
     let Some((&(top_index, top_x), covered)) = layout.spread.split_last() else {
         // An empty stock that can be refilled says so, rather than looking
-        // like a pile that has simply run out.
-        let refillable =
-            pile.kind() == PileKind::Stock && rules.activate(board, layout.pile).is_some();
+        // like a pile that has simply run out, and an empty cell says what it
+        // is — otherwise a FreeCell board opens as eight identical boxes.
+        let marker = match pile.kind() {
+            PileKind::Stock if rules.activate(board, layout.pile).is_some() => Some(RECYCLE),
+            PileKind::FreeCell => Some(FREE_CELL),
+            _ => None,
+        };
         let accent = if focus.pile == layout.pile {
             Accent::Cursor
         } else if focus.hint_target.is_some_and(|(p, _)| p == layout.pile) {
@@ -278,13 +285,7 @@ fn draw_flat(
         } else {
             Accent::Plain
         };
-        draw_empty(
-            buffer,
-            layout.x,
-            layout.top,
-            accent,
-            refillable.then_some(RECYCLE),
-        );
+        draw_empty(buffer, layout.x, layout.top, accent, marker);
         return;
     };
 
@@ -689,6 +690,32 @@ mod tests {
         assert!(view.contains("You win!"), "got:\n{view}");
         assert!(view.contains("Scorpion"), "got:\n{view}");
         assert!(view.contains("seed 7 in 0 moves"), "got:\n{view}");
+    }
+
+    #[test]
+    fn an_empty_free_cell_says_what_it_is() {
+        // Four cells and four foundations sit side by side in one row, and
+        // empty they are the same box. The marker is the only thing that tells
+        // a player which half of the board they are looking at.
+        let rules = crate::rules::freecell::FreeCell;
+        let board = rules.deal(42);
+        let spec = rules.spec(&board);
+        let lengths: Vec<usize> = board.piles().iter().map(|pile| pile.len()).collect();
+        let area = Rect::new(0, 0, 80, 28);
+        let layout =
+            crate::ui::layout::compute(&spec, &lengths, area, &vec![None; lengths.len()]).unwrap();
+
+        let mut buffer = Buffer::empty(area);
+        let focus = Focus {
+            pile: 0,
+            card: None,
+            selection: None,
+            hint_target: None,
+        };
+        draw_board(&mut buffer, &layout, &board, &rules, &focus);
+
+        let view = text(&buffer);
+        assert_eq!(view.matches(FREE_CELL).count(), 4, "got:\n{view}");
     }
 
     #[test]

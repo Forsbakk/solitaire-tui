@@ -10,8 +10,8 @@
 //! game is so much harder than Yukon and so rarely goes home.
 
 use crate::board::{Action, Board, BoardSpec, Move, MoveError, PileId};
-use crate::rules::yukon::{self, Build};
-use crate::rules::{Rules, StatusItem};
+use crate::rules::yukon;
+use crate::rules::{Build, Rules, StatusItem};
 
 #[derive(Default)]
 pub struct Russian;

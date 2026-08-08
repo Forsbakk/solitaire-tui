@@ -11,7 +11,7 @@ cargo run --release -- --game klondike --rule draw=1  # set a game's rules
 cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck board
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 213 tests
+cargo test                          # all 238 tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
@@ -78,7 +78,15 @@ the stock does), `stock_refusal` (why it would not), `send_home`, `autoplay`,
 foundation game with no stock, and `Russian` is Yukon with one predicate swapped.
 `Spider` is the only game whose actions do more than move cards — a finished
 King-to-Ace run is filed by extra `Step`s appended to the same `Action` — and
-`Spiderette` is Spider with a different `Setup`.
+`Spiderette` is Spider with a different `Setup`. `FreeCell` is the first game with
+a pile kind of its own (`PileKind::FreeCell`) and the first whose `check` enforces
+a limit `app.rs` cannot see: selection size is never capped, so the
+`(free cells + 1) × (empty columns + 1)` supermove rule lives in `capacity`. It is
+also the only game where nothing is ever face down, which is why its `autoplay`
+gate is `is_decided` rather than `face_down_count`.
+
+The `Build` predicate — alternating colour or same suit — lives in `rules/mod.rs`,
+shared by `yukon`, `russian` and `freecell`.
 
 `russian.rs` and `spiderette.rs` are the two modules that reach into another game.
 `yukon.rs` exposes its deal, spec, `check`, foundations and heuristic as
@@ -86,7 +94,8 @@ King-to-Ace run is filed by extra `Step`s appended to the same `Action` — and
 `Setup` — decks, suits, and the shape of the deal. In both cases the divergence is
 one named `Copy` type passed as one argument; anything more divergent gets its own
 file. That `spider::check` needs no `Setup` at all is what says the second split is
-honest.
+honest. `freecell.rs` is written the same way, taking a `Build`, for a Baker's Game
+that has not been written yet.
 
 ### `Action` is universal, and only reversible in exact order
 

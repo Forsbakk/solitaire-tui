@@ -40,8 +40,8 @@ const RUN: usize = KING as usize;
 /// Everything that separates Spiderette from Spider.
 ///
 /// One `Copy` type passed as one argument, rather than three parameters
-/// threaded through half the module — the same discipline `yukon::Build`
-/// keeps for a game that differs by a single predicate.
+/// threaded through half the module — the same discipline [`super::Build`]
+/// keeps for the games that differ by a single predicate.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) struct Setup {
     decks: usize,

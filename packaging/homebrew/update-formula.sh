@@ -70,7 +70,7 @@ cat > "$tmp" <<EOF
 # The macOS binaries are built on macOS runners, so the native linker has
 # ad-hoc signed them and Apple Silicon will run them.
 class SolitaireTui < Formula
-  desc "Six solitaire games in the terminal, built with ratatui"
+  desc "Seven solitaire games in the terminal, built with ratatui"
   homepage "https://github.com/$repo"
   version "$version"
   license any_of: ["MIT", "Apache-2.0"]

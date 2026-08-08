@@ -24,6 +24,8 @@ pub enum PileKind {
     Tableau,
     /// Where finished suits are collected.
     Foundation,
+    /// A space that holds a single card, which is always in play.
+    FreeCell,
     /// Undealt cards.
     Stock,
     /// Cards turned from the stock and available to play.
@@ -417,6 +419,10 @@ pub enum MoveError {
     WrongTarget,
     /// Only the exposed card of that pile may be taken.
     NotExposed,
+    /// A pile that holds one card already has it.
+    Occupied,
+    /// More cards than there is room to shuffle across.
+    TooMany,
 }
 
 impl MoveError {
@@ -430,6 +436,8 @@ impl MoveError {
             Self::NotASequence => "Only an ordered run can move as a unit.",
             Self::WrongTarget => "Cards cannot be moved there.",
             Self::NotExposed => "Only the top card of that pile can be taken.",
+            Self::Occupied => "Only one card fits there.",
+            Self::TooMany => "There is not room to move that many cards at once.",
         }
     }
 }

@@ -3,7 +3,7 @@
 pkgname=solitaire-tui
 pkgver=0.2.0
 pkgrel=1
-pkgdesc='Six solitaire games in the terminal, built with ratatui'
+pkgdesc='Seven solitaire games in the terminal, built with ratatui'
 arch=('x86_64' 'aarch64')
 url='https://github.com/Forsbakk/solitaire-tui'
 license=('MIT OR Apache-2.0')

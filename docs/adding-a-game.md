@@ -25,6 +25,8 @@ than the version below.
 - [Actions and undo](#actions-and-undo)
 - [Laying out the board](#laying-out-the-board)
 - [Rule options](#rule-options)
+- [A second game that is nearly the first](#a-second-game-that-is-nearly-the-first)
+- [A new pile kind](#a-new-pile-kind)
 - [Testing a new game](#testing-a-new-game)
 - [Checklist](#checklist)
 - [Traps](#traps)
@@ -392,9 +394,9 @@ pile.is_complete_run() -> bool           // K..A, one suit, nothing hidden
 pile.is_complete_suit() -> bool          // A..K, one suit
 ```
 
-`PileKind` is `Tableau | Foundation | Stock | Waste`. `FreeCell` and `Reserve`
-were deliberately left out until a game needs them — add the variant with the
-game.
+`PileKind` is `Tableau | Foundation | FreeCell | Stock | Waste`. `Reserve` was
+deliberately left out until a game needs it — add the variant with the game, and
+see [A new pile kind](#a-new-pile-kind) for the four places one touches.
 
 ### `Board`
 
@@ -605,6 +607,34 @@ rule really are one game's.
 Its tests should cover only what differs — the build rule, and an assertion that
 the deals really are identical — and lean on the first game's suite for the rest.
 
+When a *third* game wants the same divergence, move it up rather than reaching
+sideways for it: `Build` started in `yukon.rs` as `pub(super)` for `russian.rs`,
+and moved to `src/rules/mod.rs` when `freecell.rs` wanted it too. A shared
+predicate belongs to the trait's module; a shared *deal* still belongs to the
+game it came from.
+
+## A new pile kind
+
+`PileKind` is not a closed set — `FreeCell` arrived with FreeCell, and `Reserve`
+will arrive with Canfield. Adding one is a one-line variant plus three places
+that are easy to miss, because nothing in the codebase matches `PileKind`
+exhaustively and so nothing will fail to compile:
+
+1. **`check`'s target match**, in every game that could be handed the new kind.
+   Match on `target.kind()` with the arms spelled out rather than a `_`, and the
+   next new kind will fail to compile in exactly the files that must decide what
+   it means.
+2. **`app.rs::suggest`**, which describes an empty target. Without an arm, an
+   empty cell is announced as "an empty pile", which reads as an empty column.
+3. **`render::draw_flat`**, which draws an empty pile. Without a marker, four
+   empty cells and four empty foundations are eight identical boxes in a row.
+
+The same applies to a new `MoveError`: the variant *and* its arm in `message()`,
+whose wording stays game-neutral. FreeCell added `Occupied` ("Only one card fits
+there.") and `TooMany` rather than reusing `WrongTarget`, because a full cell is
+a refusal that lasts one move and "Cards cannot be moved there." sounds
+permanent.
+
 ## Testing a new game
 
 Registering the game immediately subjects it to the generic tests in
@@ -712,6 +742,25 @@ is also what keeps the player from filing a run by hand.
 press. Keep it to comparisons.
 
 **`autoplay` that never returns `None`.** `Session::finish` loops until it does.
+
+**`autoplay` gated on `face_down_count`.** Klondike and Yukon ask whether
+anything is still face down, which is the right question only because something
+is. Copy that gate into a game where nothing ever is — FreeCell — and the app
+announces "Every card is free — press A to finish." after the first move, and
+`A` files cards while the game is still genuinely hard. The gate has to be a
+condition the opening deal actually fails; `freecell::is_decided` asks whether
+every column runs down in rank. And `autoplay` must read *every* pile a card can
+be stranded in: draining only the tableau leaves cards in the free cells, so the
+loop stops and `is_won` is never true.
+
+**A limit the app cannot enforce.** `app.rs` never caps how many cards are
+picked up — `select` just records `(pile, index)` — so a game with a move-size
+rule refuses it in `check`, where the player's drop and `suggestions` both
+arrive. FreeCell's `capacity` is the pattern. Ask it *last*, after the build
+rule: a run refused for being too long is refused for a reason that changes next
+turn, and a player dropping onto a mismatched card should hear about the
+mismatch instead. The move itself stays a single `Action::moving`, so a
+supermove is one step and one undo.
 
 **Face-down cards landing on a face-up pile.** `face_up: false` is only valid
 onto an entirely face-down pile. If you need to hide cards some other way,

@@ -446,6 +446,16 @@ mod tests {
         BoardSpec::new(spots)
     }
 
+    /// A fixed row as wide as the tableau under it — FreeCell's four cells and
+    /// four foundations over eight columns.
+    fn free_cell_spec() -> BoardSpec {
+        let mut spots: Vec<Spot> = (0..8)
+            .map(|i| Spot::new(i, 0, i as u16, Fan::None))
+            .collect();
+        spots.extend((0..8).map(|i| Spot::new(8 + i, 1, i as u16, Fan::Down)));
+        BoardSpec::new(spots)
+    }
+
     fn lengths(spec: &BoardSpec, value: usize) -> Vec<usize> {
         vec![value; spec.spots.len()]
     }
@@ -676,6 +686,33 @@ mod tests {
             layout.hit(x, CARD_H).is_none(),
             "the gap belongs to neither"
         );
+    }
+
+    #[test]
+    fn a_fixed_row_as_wide_as_the_tableau_still_resolves_a_slot_at_a_time() {
+        // Eight flat piles over eight fanned ones, every column shared with a
+        // pile above it. Nothing may be wider than the tableau, and no click
+        // may land on the wrong half of the board.
+        let spec = free_cell_spec();
+        assert_eq!(board_width(&spec), 55, "no wider than its eight columns");
+
+        let mut lengths = lengths(&spec, 6);
+        for cell in lengths.iter_mut().take(8) {
+            *cell = 1;
+        }
+        let layout = compute(&spec, &lengths, area(80, 30), &no_pins(&spec)).unwrap();
+        assert_slots_round_trip(&layout);
+
+        for slot in 0..8 {
+            let x = layout.pile(slot).unwrap().x;
+            assert_eq!(layout.pile(8 + slot).unwrap().x, x, "slot {slot} lines up");
+            assert_eq!(layout.hit(x, 1).unwrap().pile, slot, "the fixed row");
+            assert_eq!(
+                layout.hit(x, CARD_H + ROW_GAP + 1).unwrap().pile,
+                8 + slot,
+                "the column beneath it"
+            );
+        }
     }
 
     #[test]
