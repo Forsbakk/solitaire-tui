@@ -62,14 +62,21 @@ drops in the prebuilt binary:
 paru -S solitaire-tui-bin
 ```
 
+On macOS or Linux, with Homebrew:
+
+```sh
+brew install Forsbakk/tap/solitaire-tui
+```
+
 Or with Rust 1.88 or newer, from crates.io:
 
 ```sh
 cargo install solitaire-tui
 ```
 
-Either way the binary is called `solitaire-tui`. To work on it, clone the
-repository and use `cargo run` as below.
+Any of them installs a binary called `solitaire-tui`. Note that `cargo install`
+puts it in `~/.cargo/bin`, which is only on your `PATH` if you put it there. To
+work on the game instead, clone the repository and use `cargo run` as below.
 
 Any terminal with 256 colours and a font covering `♠ ♥ ♦ ♣` will do. On Windows
 use Windows Terminal rather than the legacy console host, which cannot render

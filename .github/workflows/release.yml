@@ -66,3 +66,88 @@ jobs:
           dry-run: ${{ github.event_name == 'workflow_dispatch' }}
           ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/tags/v0.0.0-rehearsal' || '' }}
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  # macOS runners ship with Homebrew, and are Apple Silicon — so the formula can
+  # be installed and run on the one platform that cannot be checked anywhere
+  # else. This gates the tap push: a formula that does not work never ships.
+  formula-check:
+    needs: binaries
+    if: github.event_name == 'push'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the formula for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./packaging/homebrew/update-formula.sh "${GITHUB_REF#refs/tags/v}"
+      - name: Audit it
+        # Advisory only: audit's house style is aimed at homebrew-core, and a
+        # personal tap should not fail a release over a naming preference.
+        continue-on-error: true
+        run: brew audit --formula ./packaging/homebrew/Formula/solitaire-tui.rb
+      - name: Install and run it
+        # Installed through a throwaway local tap rather than from a file path:
+        # installing a formula by path is exactly the thing Homebrew keeps
+        # restricting, and a tap is how it will really be consumed anyway.
+        run: |
+          brew tap-new local/test --no-git
+          cp packaging/homebrew/Formula/solitaire-tui.rb \
+            "$(brew --repository local/test)/Formula/"
+          brew install local/test/solitaire-tui
+          brew test local/test/solitaire-tui
+          solitaire-tui --version
+
+  # The formula pins checksums of the archives built above, so it cannot be
+  # correct until they exist — which is why the copy in this repository is
+  # regenerated here, after the fact, rather than bumped before tagging.
+  tap:
+    needs: [binaries, formula-check]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Regenerate the formula from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./packaging/homebrew/update-formula.sh "${GITHUB_REF#refs/tags/v}"
+      - name: Commit it back to main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add packaging/homebrew/Formula/solitaire-tui.rb
+          if git diff --staged --quiet; then
+            echo 'formula already current'
+          else
+            git commit -m "homebrew: solitaire-tui ${GITHUB_REF#refs/tags/v}"
+            git push origin main
+          fi
+      - name: Push it to the tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          # Not a failure: the tap is optional, and a release should not go red
+          # because it has not been set up yet.
+          if [ -z "$TAP_TOKEN" ]; then
+            echo 'HOMEBREW_TAP_TOKEN is not set — skipping the tap push'
+            exit 0
+          fi
+          version="${GITHUB_REF#refs/tags/v}"
+          git clone --depth 1 \
+            "https://x-access-token:$TAP_TOKEN@github.com/Forsbakk/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp packaging/homebrew/Formula/solitaire-tui.rb tap/Formula/
+          cd tap
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/solitaire-tui.rb
+          if git diff --staged --quiet; then
+            echo 'tap already current'
+          else
+            git commit -m "solitaire-tui $version"
+            # Explicit refspec: if the tap is still an empty repository the
+            # clone leaves an unborn branch with no upstream, and a bare
+            # `git push` fails or invents the wrong branch name.
+            git push origin HEAD:main
+          fi
