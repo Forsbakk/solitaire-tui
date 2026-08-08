@@ -119,7 +119,9 @@ are the stock.
 * The four **foundations** build up in suit from the Ace. `f` sends a card to
   the one that will take it — the card you are holding, or the one under the
   cursor. There is never a choice to make: at most one foundation accepts any
-  given card, and an Ace simply takes the first free one.
+  given card, and an Ace simply takes the first free one. Where no foundation
+  will have it, `f` falls through to the tableau and plays it onto the only
+  column that takes it.
 * Win by sending all 52 cards home. Once nothing is face down and the stock is
   spent, `A` plays out the rest.
 
@@ -138,6 +140,8 @@ down; the rest are face up. Three cards are held back as the stock.
 * A face-down card left exposed by a move turns face up.
 * Press `d` once per game to deal the three stock cards, one onto each of the
   first three columns.
+* Scorpion builds in suit, so a card that can move at all can only move to one
+  place. `f` plays it there, which is most of the game's bookkeeping in one key.
 * You win when all four suits sit in the tableau as complete King-to-Ace runs.
 
 Not every deal is winnable. `u` undoes as far back as you like, and `r` deals the
@@ -156,7 +160,8 @@ first move.
 * Drop it on the **opposite colour, one rank higher** — a red 9 onto a black 10.
 * Only a **King** may move to an empty pile.
 * A face-down card left exposed by a move turns face up.
-* The four **foundations** build up in suit from the Ace. `f` sends a card home,
+* The four **foundations** build up in suit from the Ace. `f` sends a card home
+  — or, when no foundation will have it, onto the only column that takes it —
   and a card may be taken back off a foundation when you need it. `A` plays out
   the rest once nothing is face down.
 * Win by sending all 52 cards home.
@@ -190,8 +195,10 @@ comes from the stock rather than the tableau.
   finished it, so one `u` takes the whole thing back.
 * Win by filing all four runs.
 
-There is no `f` and no `A`: filing is automatic, and a Spider board is never
-decided until it is won.
+There is no `A`: a Spider board is never decided until it is won. `f` needs no
+foundation to be useful here — it plays a card or a suited run onto the only
+column that takes it, and prefers a card to an empty column, which is the one
+thing you cannot get back.
 
 ### Spider
 
@@ -214,7 +221,7 @@ the same board at all three difficulties.
 | `space` `enter` | pick up the card under the cursor, or drop what you hold |
 | `esc` | put a held card back |
 | `d` | turn or deal the stock (Klondike, Scorpion, Spiderette, Spider) |
-| `f` | send a card to its foundation — the one held, or under the cursor (Klondike, Yukon, Russian) |
+| `f` | play a card where it has no choice but to go — its foundation, or the only column that takes it |
 | `A` | play out a decided game (Klondike, Yukon, Russian) |
 | `H` | suggest a move; press again for the next one |
 | `u` / `ctrl-r` | undo / redo |
@@ -244,6 +251,18 @@ weight, so they stay legible where colour does not survive:
 
 The `▶` stays beside the cursor even once you have picked a card up, so the frame
 tells you *what* you are holding and the caret still tells you *where* you are.
+
+## Forced moves
+
+A card often has exactly one place it can go, and finding which column that is
+costs more attention than the move is worth. `f` plays it there — the card you
+are holding, or the one under the cursor, run and all.
+
+Foundations first, since at most one can take a given card, then the columns. Two
+columns that would both take it is a real choice, so `f` says so and leaves the
+card alone. An empty column is the last resort, and several of them count as one:
+they are interchangeable, so `f` takes the leftmost. The status line offers the
+key whenever it would work.
 
 ## Hints
 

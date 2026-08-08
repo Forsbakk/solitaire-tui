@@ -221,8 +221,12 @@ turned over as it is filed, so it arrives Ace up to King like everyone else's.
 
 ### 6. Convenience moves
 
-`send_home` backs the `f` key; `autoplay` backs `A` and is drained one action at
-a time so the finish stays undoable:
+`f` is two halves. `send_home` is the first — the foundation, where there is
+never anything to choose between. The second is the defaulted `Rules::only_move`,
+which plays the card onto the one column that takes it, and your game gets that
+half for free from `check`: no method to write, and a game with no foundations at
+all still has a working `f`. `autoplay` backs `A` and is drained one action at a
+time so the finish stays undoable:
 
 ```rust
 fn send_home(&self, board: &Board, from: PileId) -> Option<Action> {
@@ -252,6 +256,13 @@ fn autoplay(&self, board: &Board) -> Option<Action> {
 `autoplay` must eventually return `None`, or `Session::finish` will spin. Gate
 it on a condition that the actions themselves make false — here, the game being
 won.
+
+`only_move` filters with `check` *and* `is_useful`, the same pair `suggestions`
+uses, so a move your hints refuse to offer is one the shortcut will not play
+either. It answers `None` the moment two occupied columns would both take the
+card: that is a decision the player has to make. Empty columns are its last
+resort and count collectively as one destination, since they are
+interchangeable — override it only if that is untrue in your game.
 
 ### 7. Hints
 
@@ -353,7 +364,8 @@ Defined in `src/rules/mod.rs`.
 | `action_for(board, mv)` | `Action::moving(...)` — lift a tail onto another pile | the move does more than move cards — `spider.rs` appends the steps that file a finished run, so the whole thing stays one undo |
 | `activate(board, pile)` | `None` | a pile *does* something when pressed: deal, draw, recycle |
 | `stock_refusal(board)` | `"The stock has nothing left to give."` | a *full* stock can still refuse, and saying it is spent would be a lie — Spider will not deal onto an empty column |
-| `send_home(board, from)` | `None` | the game has foundations and wants the `f` key. The app passes the pile of the card in hand when one is held, so it must work for a lone card as well as for the pile under the cursor |
+| `send_home(board, from)` | `None` | the game has foundations, so `f` should try one before it looks at the columns. The app passes the pile of the card in hand when one is held, so it must work for a lone card as well as for the pile under the cursor |
+| `only_move(board, from, index)` | the one column `check` allows, empty ones last | never, in practice — the default is the whole of the `f` key for a game without foundations, and it is derived from `check` |
 | `autoplay(board)` | `None` | a decided position should be playable out with `A` |
 | `is_useful(board, mv)` | `true` | some legal moves are pointless |
 | `rank(board, mv)` | `0` | you want hints in a sensible order (you do) |
@@ -692,7 +704,8 @@ file. Run one with `cargo test only_a_king`, and print a board mid-test with
 - [ ] `is_won`
 - [ ] `rank` and `is_useful` so hints are sensible
 - [ ] `has_progress_move` if the game has a stock
-- [ ] `activate` / `send_home` / `autoplay` if the game wants those keys
+- [ ] `activate` / `send_home` / `autoplay` if the game wants those keys (`f`'s
+      column half comes free from `check` — nothing to write)
 - [ ] `help` listing only the keys this game adds
 - [ ] `status` for any counter worth showing
 - [ ] `pub mod` + registry line in `src/rules/mod.rs`

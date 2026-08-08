@@ -15,7 +15,7 @@ pub mod spider;
 pub mod spiderette;
 pub mod yukon;
 
-use crate::board::{Action, Board, BoardSpec, Move, MoveError, PileId};
+use crate::board::{Action, Board, BoardSpec, Move, MoveError, PileId, PileKind};
 
 /// A rule the player can change before dealing, shown in the menu's preview
 /// pane. The game stores which value is selected and reads it when dealing.
@@ -162,6 +162,44 @@ pub trait Rules {
         found
     }
 
+    /// The one column this card can go to, when the board leaves no choice.
+    ///
+    /// Foundations are not considered: [`Rules::send_home`] is the shortcut's
+    /// first port of call, and at most one foundation can take a given card, so
+    /// there is nothing to decide there. The ambiguity this answers is the
+    /// tableau one — two columns that would both take the card are a decision
+    /// the player has to make, so this returns `None` rather than guess.
+    ///
+    /// Empty columns are a fallback and count collectively as one destination.
+    /// Landing on an actual card is nearly always the move that was meant, and
+    /// spending a scarce empty column is not something a one-key shortcut should
+    /// do while a real target exists.
+    ///
+    /// The filter is [`Rules::check`] plus [`Rules::is_useful`], the same pair
+    /// [`Rules::suggestions`] uses — the shortcut should not play a move the
+    /// hint would refuse to offer.
+    fn only_move(&self, board: &Board, from: PileId, index: usize) -> Option<Move> {
+        let mut onto_card = None;
+        let mut empty = None;
+        for to in 0..board.piles().len() {
+            let target = board.pile(to);
+            if target.kind() != PileKind::Tableau {
+                continue;
+            }
+            let mv = Move::new(from, index, to);
+            if self.check(board, mv).is_err() || !self.is_useful(board, mv) {
+                continue;
+            }
+            if target.is_empty() {
+                // The leftmost empty column, and only if nothing else takes it.
+                empty.get_or_insert(mv);
+            } else if onto_card.replace(mv).is_some() {
+                return None;
+            }
+        }
+        onto_card.or(empty)
+    }
+
     /// Whether any move that changes the position remains.
     fn has_progress_move(&self, board: &Board) -> bool {
         !self.suggestions(board).is_empty()
@@ -303,6 +341,76 @@ mod tests {
                     "{} suggested an illegal move",
                     game.name()
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn the_only_move_is_always_a_legal_move() {
+        for game in games() {
+            let board = game.deal(42);
+            for from in 0..board.piles().len() {
+                let source = board.pile(from);
+                let Some(first) = source.first_face_up() else {
+                    continue;
+                };
+                for index in first..source.len() {
+                    let Some(mv) = game.only_move(&board, from, index) else {
+                        continue;
+                    };
+                    assert_eq!((mv.from, mv.index), (from, index), "{}", game.name());
+                    assert_eq!(game.check(&board, mv), Ok(()), "{}", game.name());
+                    assert!(game.is_useful(&board, mv), "{}", game.name());
+                    assert_eq!(
+                        board.pile(mv.to).kind(),
+                        PileKind::Tableau,
+                        "{} played to something that is not a column",
+                        game.name()
+                    );
+                }
+            }
+        }
+    }
+
+    /// The whole point of the shortcut: it acts when the board leaves one
+    /// choice, and stays out of the way when the player has a real decision.
+    #[test]
+    fn the_only_move_declines_once_two_columns_would_take_the_card() {
+        for game in games() {
+            let board = game.deal(42);
+            for from in 0..board.piles().len() {
+                let source = board.pile(from);
+                let Some(first) = source.first_face_up() else {
+                    continue;
+                };
+                for index in first..source.len() {
+                    let onto_cards: Vec<_> = (0..board.piles().len())
+                        .filter(|&to| board.pile(to).kind() == PileKind::Tableau)
+                        .filter(|&to| !board.pile(to).is_empty())
+                        .map(|to| Move::new(from, index, to))
+                        .filter(|&mv| game.check(&board, mv).is_ok() && game.is_useful(&board, mv))
+                        .collect();
+                    let chosen = game.only_move(&board, from, index);
+                    match onto_cards.len() {
+                        0 => assert!(
+                            chosen.is_none_or(|mv| board.pile(mv.to).is_empty()),
+                            "{} reached past the empty columns",
+                            game.name()
+                        ),
+                        1 => assert_eq!(
+                            chosen,
+                            Some(onto_cards[0]),
+                            "{} passed up the only card that takes it",
+                            game.name()
+                        ),
+                        _ => assert_eq!(
+                            chosen,
+                            None,
+                            "{} chose between two columns for the player",
+                            game.name()
+                        ),
+                    }
+                }
             }
         }
     }

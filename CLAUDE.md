@@ -11,7 +11,7 @@ cargo run --release -- --game klondike --rule draw=1  # set a game's rules
 cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck board
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 213 tests
+cargo test                          # all 224 tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
@@ -70,9 +70,11 @@ any change to the `Rules` contract.
 The short version: implement `Rules` (`src/rules/mod.rs`) and add it to
 `rules::games()`. Required: `name`, `blurb`, `help`, `deal`, `spec`, `check`,
 `is_won`. Everything else is defaulted — notably `suggestions`, which enumerates
-every legal move and sorts by the game's `rank`. Override `activate` (what pressing
-the stock does), `stock_refusal` (why it would not), `send_home`, `autoplay`,
-`is_useful`, `options`/`configure`/`selected` only as needed.
+every legal move and sorts by the game's `rank`, and `only_move`, which is the
+same filter narrowed to one card and is the whole of the `f` key for a game with
+no foundations. Override `activate` (what pressing the stock does),
+`stock_refusal` (why it would not), `send_home`, `autoplay`, `is_useful`,
+`options`/`configure`/`selected` only as needed.
 
 `Scorpion` is the minimal example; `Klondike` uses nearly every hook; `Yukon` is a
 foundation game with no stock, and `Russian` is Yukon with one predicate swapped.

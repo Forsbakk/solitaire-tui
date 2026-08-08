@@ -199,7 +199,7 @@ impl Session {
             KeyCode::Char('n') => self.restart(random_seed()),
             KeyCode::Char('r') => self.restart(self.board.seed()),
             KeyCode::Char('d') => self.deal_stock(),
-            KeyCode::Char('f') => self.send_home(),
+            KeyCode::Char('f') => self.play(),
             KeyCode::Char('A') => self.finish(),
             KeyCode::Esc => {
                 self.selection = None;
@@ -430,31 +430,67 @@ impl Session {
         }
     }
 
-    /// Send the card under the cursor to wherever it belongs.
-    /// Send a card to wherever it belongs, without naming the pile.
+    /// Play a card where it has no choice but to go, without naming the pile.
     ///
-    /// Acts on the card in hand when one is held, so picking a card up and
-    /// pressing this finishes the move — at most one foundation can take any
-    /// given card, so there is nothing to choose between.
-    fn send_home(&mut self) {
-        let from = match self.selection {
-            Some((pile, index)) => {
-                if self.board.pile(pile).len() - index > 1 {
-                    self.warn("Only a single card can be sent on its own.");
-                    return;
-                }
-                pile
+    /// Acts on the card in hand when one is held, otherwise on the card under
+    /// the cursor. The foundation comes first — at most one can take any given
+    /// card, so there is nothing to choose between — and then the tableau, where
+    /// [`Rules::only_move`] answers only when a single column would take it.
+    ///
+    /// A held run travels whole or not at all. The foundation branch is skipped
+    /// for one, since sending its head home alone would break it up.
+    fn play(&mut self) {
+        let (from, index) = match self
+            .selection
+            .or_else(|| self.cursor_card.map(|index| (self.cursor_pile, index)))
+        {
+            Some(head) => head,
+            None => {
+                self.warn("That pile is empty.");
+                return;
             }
-            None => self.cursor_pile,
         };
 
-        match self.rules.send_home(&self.board, from) {
-            Some(action) => {
+        // The foundation only ever takes the exposed card, which is also the
+        // only case where `send_home` and the card under the cursor agree.
+        if self.board.pile(from).len() - index == 1
+            && let Some(action) = self.rules.send_home(&self.board, from)
+        {
+            self.selection = None;
+            self.hint = None;
+            self.perform(action);
+            return;
+        }
+
+        match self.rules.only_move(&self.board, from, index) {
+            Some(mv) => {
+                let action = self.rules.action_for(&self.board, mv);
                 self.selection = None;
                 self.hint = None;
                 self.perform(action);
+                self.cursor_pile = mv.to;
+                self.snap_cursor();
             }
-            None => self.warn("That card has nowhere to go yet."),
+            None => self.warn(self.refusal(from, index)),
+        }
+    }
+
+    /// Why [`Session::play`] would not move this card. Having a move on offer
+    /// while `only_move` declined means the columns disagreed, which is a
+    /// different problem from having nowhere to go at all.
+    fn refusal(&self, from: PileId, index: usize) -> &'static str {
+        if !self.board.pile(from).is_face_up(index) {
+            return MoveError::FaceDown.message();
+        }
+        let ambiguous = self
+            .rules
+            .suggestions(&self.board)
+            .iter()
+            .any(|mv| mv.from == from && mv.index == index);
+        if ambiguous {
+            "More than one column takes that card — choose one."
+        } else {
+            "That card has nowhere to go yet."
         }
     }
 
@@ -1581,30 +1617,210 @@ mod tests {
     }
 
     #[test]
-    fn f_refuses_to_break_up_a_run_you_are_holding() {
-        let mut session = klondike(42);
-        press(&mut session, KeyCode::Char('d'));
-
-        // Build a two-card run in hand by lifting from a tableau pile that has
-        // more than one face-up card, then ask to send it home.
-        let deep = (0..7).find(|&pile| {
-            let p = session.board.pile(pile);
-            p.len() - p.face_down() > 1
-        });
-        let Some(pile) = deep else { return };
-
-        session.cursor_pile = pile;
-        session.cursor_card = Some(session.board.pile(pile).face_down());
+    fn f_leaves_a_held_run_alone_when_it_has_nowhere_to_go() {
+        // Scorpion seed 42: pile 0's first face-up card is A♣, and the only
+        // card that would take it is the 2♣ sitting right above it on the same
+        // pile. A run that cannot move must stay in hand, whole.
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char('1'));
+        for _ in 0..3 {
+            press(&mut session, KeyCode::Up);
+        }
         press(&mut session, KeyCode::Char(' '));
-        assert!(session.selection.is_some());
+        assert_eq!(session.selection, Some((0, 3)), "holding a four-card tail");
 
         press(&mut session, KeyCode::Char('f'));
-        assert!(session.selection.is_some(), "still holding the run");
-        assert!(
-            session.message.contains("single card"),
-            "got {:?}",
+        assert_eq!(session.selection, Some((0, 3)), "still holding it");
+        assert_eq!(session.board.pile(0).len(), 7, "and nothing moved");
+        assert_eq!(session.message, "That card has nowhere to go yet.");
+    }
+
+    #[test]
+    fn f_plays_a_card_onto_its_only_column() {
+        // Scorpion seed 42: pile 1 holds J♦ under 2♦ and 4♣, and Q♦ is exposed
+        // on pile 6 — the one column in the game that takes a J♦.
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char('2'));
+        press(&mut session, KeyCode::Up);
+        press(&mut session, KeyCode::Up);
+        assert_eq!(
+            session.board.pile(1).cards()[session.cursor_card.unwrap()],
+            Card::new(11, Suit::Diamonds)
+        );
+
+        press(&mut session, KeyCode::Char('f'));
+        assert_eq!(session.history.len(), 1, "{}", session.message);
+        assert_eq!(session.board.pile(6).len(), 10, "J♦ and its tail landed");
+        assert_eq!(
+            session.board.pile(6).exposed(),
+            Some(Card::new(4, Suit::Clubs))
+        );
+        assert_eq!(session.board.pile(1).len(), 4);
+        assert_eq!(session.cursor_pile, 6, "the cursor follows the card");
+    }
+
+    #[test]
+    fn f_plays_a_held_run_onto_its_only_column() {
+        // Pile 5 is dealt face up, so lifting 9♣ takes K♦ 5♦ 6♠ with it. Only
+        // pile 3's exposed 10♣ takes a 9♣.
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char('6'));
+        for _ in 0..3 {
+            press(&mut session, KeyCode::Up);
+        }
+        press(&mut session, KeyCode::Char(' '));
+        assert_eq!(session.selection, Some((5, 3)));
+
+        press(&mut session, KeyCode::Char('f'));
+        assert!(session.selection.is_none(), "{}", session.message);
+        assert_eq!(session.board.pile(3).len(), 11, "all four cards travelled");
+        assert_eq!(
+            session.board.pile(3).exposed(),
+            Some(Card::new(6, Suit::Spades))
+        );
+        assert_eq!(session.board.pile(5).len(), 3);
+    }
+
+    #[test]
+    fn a_played_card_comes_back_in_one_undo() {
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char('2'));
+        press(&mut session, KeyCode::Up);
+        press(&mut session, KeyCode::Up);
+        press(&mut session, KeyCode::Char('f'));
+        press(&mut session, KeyCode::Char('u'));
+        assert_eq!(session.board, Scorpion.deal(42));
+    }
+
+    #[test]
+    fn f_says_nothing_takes_the_card_when_nothing_does() {
+        // Pile 0 exposes A♦, and the 2♦ that would take it is buried on pile 1.
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char('1'));
+        press(&mut session, KeyCode::Char('f'));
+        assert!(session.history.is_empty());
+        assert_eq!(session.message, "That card has nowhere to go yet.");
+    }
+
+    #[test]
+    fn f_refuses_to_choose_between_two_columns() {
+        // Spider builds down regardless of suit, so a 9♥ sitting under two
+        // exposed tens is a decision the player has to make themselves.
+        let mut session = spider(42);
+        session.board = spider_board(&[
+            Pile::tableau(
+                1,
+                &[Card::new(KING, Suit::Spades), Card::new(9, Suit::Hearts)],
+            ),
+            Pile::tableau(0, &[Card::new(10, Suit::Clubs)]),
+            Pile::tableau(0, &[Card::new(10, Suit::Diamonds)]),
+        ]);
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('1'));
+        press(&mut session, KeyCode::Char('f'));
+        assert!(session.history.is_empty(), "nothing was guessed at");
+        assert_eq!(
+            session.message,
+            "More than one column takes that card — choose one."
+        );
+    }
+
+    #[test]
+    fn f_prefers_a_real_card_to_an_empty_column() {
+        // Empty columns are scarce in Spider, and any card may take one — so
+        // the shortcut must not spend one while a card would take the move.
+        let mut session = spider(42);
+        session.board = spider_board(&[
+            Pile::tableau(
+                1,
+                &[Card::new(KING, Suit::Spades), Card::new(9, Suit::Hearts)],
+            ),
+            Pile::tableau(0, &[]),
+            Pile::tableau(0, &[Card::new(10, Suit::Clubs)]),
+        ]);
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('1'));
+        press(&mut session, KeyCode::Char('f'));
+        assert_eq!(session.board.pile(2).len(), 2, "{}", session.message);
+        assert!(session.board.pile(1).is_empty(), "the column is still free");
+    }
+
+    #[test]
+    fn f_takes_the_leftmost_empty_column_when_that_is_all_there_is() {
+        // Several empty columns are one destination, not several: they are
+        // interchangeable, so there is nothing for the player to decide.
+        let mut session = spider(42);
+        session.board = spider_board(&[
+            Pile::tableau(
+                1,
+                &[Card::new(KING, Suit::Spades), Card::new(9, Suit::Hearts)],
+            ),
+            Pile::tableau(0, &[Card::new(12, Suit::Diamonds)]),
+        ]);
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('1'));
+        press(&mut session, KeyCode::Char('f'));
+        assert_eq!(
+            session.board.pile(2).exposed(),
+            Some(Card::new(9, Suit::Hearts)),
+            "{}",
             session.message
         );
+        assert!(session.board.pile(3).is_empty());
+    }
+
+    #[test]
+    fn a_play_that_finishes_a_spider_run_files_it_in_the_same_move() {
+        // The shortcut goes through `action_for`, so Spider still appends the
+        // steps that file the run — one move, and one undo.
+        let mut session = spider(42);
+        let run: Vec<Card> = (0..12).map(|i| Card::new(KING - i, Suit::Spades)).collect();
+        session.board = spider_board(&[
+            Pile::tableau(0, &run),
+            Pile::tableau(0, &[Card::new(ACE, Suit::Spades)]),
+        ]);
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('2'));
+        press(&mut session, KeyCode::Char('f'));
+        assert_eq!(session.history.len(), 1, "{}", session.message);
+        assert!(session.board.pile(0).is_empty(), "the run left the tableau");
+        assert_eq!(session.board.pile(10).len(), 13, "onto a foundation");
+
+        press(&mut session, KeyCode::Char('u'));
+        assert_eq!(
+            session.board.pile(0).len(),
+            12,
+            "and one undo walks it back"
+        );
+        assert!(session.board.pile(10).is_empty());
+    }
+
+    #[test]
+    fn f_still_sends_a_card_home_before_looking_at_columns() {
+        // A 2♥ would take the A♠, but the foundation is where an ace belongs.
+        let mut session = klondike(42);
+        let mut piles: Vec<Pile> = session.board.piles().to_vec();
+        piles[0] = Pile::tableau(0, &[Card::new(ACE, Suit::Spades)]);
+        piles[1] = Pile::tableau(0, &[Card::new(2, Suit::Hearts)]);
+        for pile in piles.iter_mut().take(7).skip(2) {
+            *pile = Pile::tableau(0, &[]);
+        }
+        session.board = Board::new(42, piles);
+        session.clamp_cursor();
+
+        press(&mut session, KeyCode::Char('1'));
+        press(&mut session, KeyCode::Char('f'));
+        assert_eq!(session.board.pile(1).len(), 1, "the 2♥ was passed over");
+        let home: usize = session
+            .board
+            .of_kind(PileKind::Foundation)
+            .map(|pile| session.board.pile(pile).len())
+            .sum();
+        assert_eq!(home, 1, "{}", session.message);
     }
 
     #[test]
@@ -1631,6 +1847,17 @@ mod tests {
         press(&mut session, KeyCode::Char(' '));
         let view = screen(&mut session, 80, 30);
         assert!(!view.contains("send it home"), "got:\n{view}");
+        assert!(!view.contains("f to play it"), "got:\n{view}");
+
+        // A run with exactly one column waiting is offered too, even in a game
+        // with no foundations to send anything home to.
+        let mut session = scorpion(42);
+        press(&mut session, KeyCode::Char('2'));
+        press(&mut session, KeyCode::Up);
+        press(&mut session, KeyCode::Up);
+        press(&mut session, KeyCode::Char(' '));
+        let view = screen(&mut session, 80, 30);
+        assert!(view.contains("f to play it"), "got:\n{view}");
     }
 
     #[test]

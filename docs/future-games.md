@@ -21,6 +21,7 @@ commitment. Entries are grouped by cost.
 | Layout as the single source of truth for board shape | `src/ui/layout.rs` `compute()` and `hit()` | Yes, including multi-row boards |
 | Cursor, selection, hint cycling, mouse, menu | `src/app.rs`, `src/ui/menu.rs` | Yes — pile counts and key mappings come from the spec |
 | Hint ranking — default `suggestions()` + per-game `rank()` | `src/rules/mod.rs` | Yes; each game supplies only its heuristic |
+| One-key play of a forced move — default `only_move()` behind `f` | `src/rules/mod.rs`, `src/app.rs` | Yes, from `check` alone; a game with no foundations still gets the key |
 | Density fallback — Roomy, Tight, elided `⋯N` | `src/ui/layout.rs` | Yes, and every long-pile game wants it |
 | Foundations, stock, waste, draw/recycle, send-home, autoplay | `src/rules/klondike.rs` | As worked examples, not as shared code |
 | Per-game rule options in the menu and on the CLI | `src/rules/mod.rs`, `src/ui/menu.rs` | Yes — declare `OptionSpec`s and read `selected()` |
