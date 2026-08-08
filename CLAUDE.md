@@ -34,7 +34,7 @@ what keeps that field honest.
 Pushing a `v*` tag builds five targets and uploads them to a GitHub release:
 
 ```sh
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 macOS binaries must be built on macOS runners — Apple Silicon will not run an
