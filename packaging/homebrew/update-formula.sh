@@ -44,15 +44,34 @@ targets=(
 # "<sha256>  <archive>". Read every one up front: a `exit` inside the command
 # substitution below would only leave the subshell, and the formula would be
 # written with empty checksums.
-declare -A sums=()
+#
+# An indexed array kept parallel with `targets`, rather than the associative
+# array this obviously wants: CI generates the formula on a macOS runner, and
+# macOS ships bash 3.2, where `declare -A` does not exist.
+sums=()
 for t in "${targets[@]}"; do
   f="$sums_dir/solitaire-tui-v$version-$t.sha256"
   [[ -r "$f" ]] || { echo "missing checksum file: $f" >&2; exit 1; }
-  sums[$t]="$(awk '{print $1}' "$f")"
-  [[ ${sums[$t]} =~ ^[0-9a-f]{64}$ ]] || {
-    echo "not a sha256 in $f: '${sums[$t]}'" >&2; exit 1
+  sum="$(awk '{print $1}' "$f")"
+  [[ $sum =~ ^[0-9a-f]{64}$ ]] || {
+    echo "not a sha256 in $f: '$sum'" >&2; exit 1
   }
+  sums+=("$sum")
 done
+
+# Safe to call from the heredoc below: every sum was validated above, so this
+# only ever hands back something already known to be good.
+sum_for() {
+  local i
+  for i in "${!targets[@]}"; do
+    if [[ ${targets[$i]} == "$1" ]]; then
+      echo "${sums[$i]}"
+      return 0
+    fi
+  done
+  echo "no such target: $1" >&2
+  return 1
+}
 
 url_for() {
   echo "https://github.com/$repo/releases/download/v$version/solitaire-tui-v$version-$1.tar.gz"
@@ -78,22 +97,22 @@ class SolitaireTui < Formula
   on_macos do
     on_arm do
       url "$(url_for aarch64-apple-darwin)"
-      sha256 "${sums[aarch64-apple-darwin]}"
+      sha256 "$(sum_for aarch64-apple-darwin)"
     end
     on_intel do
       url "$(url_for x86_64-apple-darwin)"
-      sha256 "${sums[x86_64-apple-darwin]}"
+      sha256 "$(sum_for x86_64-apple-darwin)"
     end
   end
 
   on_linux do
     on_arm do
       url "$(url_for aarch64-unknown-linux-musl)"
-      sha256 "${sums[aarch64-unknown-linux-musl]}"
+      sha256 "$(sum_for aarch64-unknown-linux-musl)"
     end
     on_intel do
       url "$(url_for x86_64-unknown-linux-musl)"
-      sha256 "${sums[x86_64-unknown-linux-musl]}"
+      sha256 "$(sum_for x86_64-unknown-linux-musl)"
     end
   end
 

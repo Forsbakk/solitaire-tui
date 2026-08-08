@@ -2,7 +2,7 @@
 
 pkgname=solitaire-tui-bin
 _pkgname=solitaire-tui
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc='Seven solitaire games in the terminal, built with ratatui (prebuilt binary)'
 arch=('x86_64' 'aarch64')
@@ -18,8 +18,8 @@ source_x86_64=("$pkgname-$pkgver-x86_64.tar.gz::$_url_base-x86_64-unknown-linux-
 source_aarch64=("$pkgname-$pkgver-aarch64.tar.gz::$_url_base-aarch64-unknown-linux-musl.tar.gz")
 # Regenerate after the release builds:
 #   makepkg -g -p packaging/aur/solitaire-tui-bin/PKGBUILD
-sha256sums_x86_64=('3e0bb77596afb23a9b82b35aabfadfd27e1faa854702502443cd007ca0e71cc6')
-sha256sums_aarch64=('1ee36f639964ac40721343618d3f480d7a3c12fb8cf6a5316956c695fa773bc9')
+sha256sums_x86_64=('b6f413662bbdd5a2b059c42653695eecf92c467ee5460e131b74accdec4a3703')
+sha256sums_aarch64=('8656457ea9086ba36db2435e8de5137237e19643d95bb228a8a109957a12875d')
 
 package() {
   # The release archives are flat — binary, README and both licences at the top.

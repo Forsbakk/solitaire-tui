@@ -1,7 +1,7 @@
 # Maintainer: Jonas Forsbakk <jonas@forsbakk.priv.no>
 
 pkgname=solitaire-tui
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc='Seven solitaire games in the terminal, built with ratatui'
 arch=('x86_64' 'aarch64')
@@ -11,7 +11,7 @@ depends=('gcc-libs' 'glibc')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Regenerate after tagging: makepkg -g -p packaging/aur/solitaire-tui/PKGBUILD
-sha256sums=('4016b69d4ef0367d22c9c81ba4597ecccef2164b8facae536ad7b6c3228bbcaf')
+sha256sums=('f08d8b69e288ffe3af64c9c9c9cb25e8f7c6ee61bde77885cd8ca5f397bdbb0a')
 
 prepare() {
   cd "$pkgname-$pkgver"
