@@ -11,7 +11,7 @@
 //! * Row 4 (the working row) holds cards as a staging area. A player move may
 //!   only land on an empty working-row pile. Pressing `d` deals one card from
 //!   the talon onto each of the eight working-row piles (even non-empty ones).
-//!   When a player move empties a pile there, the talon auto-fills it.
+//!   A pile that empties stays empty — a free cell — until the next deal.
 //! * You win when all 24 sequence piles are complete and all 8 Aces are placed.
 
 use crate::board::{
@@ -51,8 +51,8 @@ impl Rules for Mod3 {
          suit: 2–5–8–J in the first row, 3–6–9–Q in the second, 4–7–10–K in \
          the third. Aces leave for their own pile.\n\n\
          The fourth row is a working area. Press d to deal one card onto each \
-         of its eight piles. Emptying a working-row pile auto-refills it from \
-         the talon."
+         of its eight piles. A working-row pile that empties stays open as a \
+         free cell until the next deal."
     }
 
     fn help(&self) -> &'static str {
@@ -162,12 +162,6 @@ impl Rules for Mod3 {
             }
             _ => Err(MoveError::WrongTarget),
         }
-    }
-
-    /// Wraps every player move with an auto-fill step for any working-row pile
-    /// that the move leaves empty, as long as the talon still has cards.
-    fn action_for(&self, board: &Board, mv: Move) -> Action {
-        with_autofill(board, Action::moving(board, mv.from, mv.index, mv.to))
     }
 
     /// Deal one card from the talon onto each of the eight working-row piles.
@@ -317,33 +311,6 @@ fn is_complete_mod3(pile: &Pile, base: u8) -> bool {
         && cards
             .windows(2)
             .all(|w| w[1].rank == w[0].rank + 3 && w[1].suit == w[0].suit)
-}
-
-/// Append auto-fill steps: for each empty working-row pile after `base`, deal
-/// from the talon. Mirroring Spider's run-filing so one undo reverses all of it.
-fn with_autofill(board: &Board, base: Action) -> Action {
-    let mut scratch = board.clone();
-    scratch.apply(&base);
-    let mut steps = base.steps;
-
-    for i in 0..ROWS {
-        if scratch.pile(TABLEAU + i).is_empty() && !scratch.pile(STOCK).is_empty() {
-            let step = Step {
-                from: STOCK,
-                to: TABLEAU + i,
-                count: 1,
-                reverse: false,
-                was_face_up: false,
-                face_up: true,
-                flip_source: false,
-                recycle: false,
-            };
-            scratch.apply(&Action::single(step));
-            steps.push(step);
-        }
-    }
-
-    Action::new(steps)
 }
 
 #[cfg(test)]
@@ -590,12 +557,11 @@ mod tests {
     }
 
     #[test]
-    fn auto_fill_refills_emptied_working_row_pile() {
-        // All 8 tableau piles have a card so only the moved one becomes empty.
+    fn an_emptied_working_row_pile_stays_empty_until_the_next_deal() {
         let board = make_board(
             [
                 &[c(2, Hearts)],
-                &[c(5, Spades)],
+                &[c(ACE, Spades)],
                 &[c(7, Clubs)],
                 &[c(9, Diamonds)],
                 &[c(4, Hearts)],
@@ -606,31 +572,28 @@ mod tests {
             empty8f(),
             empty8f(),
             empty8f(),
-            &[c(7, Clubs), c(3, Diamonds)], // stock has cards
+            &[c(7, Clubs), c(3, Diamonds)], // the talon still has cards
             &[],
         );
-        let mv = Move::new(0, 0, FOUND_2); // move 2♥ to a FOUND_2 pile
-        let action = Mod3.action_for(&board, mv);
 
-        // Move + exactly one auto-fill step (only pile 0 became empty).
-        assert_eq!(
-            action.steps.len(),
-            2,
-            "expected move + auto-fill; got {} steps",
-            action.steps.len()
-        );
-
-        let mut after = board.clone();
-        after.apply(&action);
-
-        // Pile 0 was emptied then auto-filled from stock.
-        assert_eq!(after.pile(TABLEAU).len(), 1, "auto-fill put a card back");
-        // Stock shrank by 1 (the auto-fill card).
-        assert_eq!(after.pile(STOCK).len(), board.pile(STOCK).len() - 1);
-
-        // Full undo round-trips.
-        after.undo(&action);
-        assert_eq!(after, board);
+        // A foundation move, an Ace home, and `f` all leave their gap open.
+        let moves = [
+            Mod3.action_for(&board, Move::new(0, 0, FOUND_2)),
+            Mod3.action_for(&board, Move::new(1, 0, ACES)),
+            Mod3.send_home(&board, 1).expect("the ace has a home"),
+        ];
+        for action in moves {
+            assert_eq!(action.steps.len(), 1, "just the move, no refill");
+            let mut after = board.clone();
+            after.apply(&action);
+            assert_eq!(after.pile(STOCK).len(), board.pile(STOCK).len());
+            let gaps = (TABLEAU..TABLEAU + ROWS)
+                .filter(|&p| after.pile(p).is_empty())
+                .count();
+            assert_eq!(gaps, 1);
+            after.undo(&action);
+            assert_eq!(after, board);
+        }
     }
 
     #[test]

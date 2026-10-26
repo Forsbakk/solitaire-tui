@@ -270,9 +270,8 @@ row — and a talon.
   The board is tall — about 31 rows at least.
 * **Aces** go to a separate pile and sit there for good. All eight must be
   placed to win.
-* The **working row** only accepts a card onto an **empty pile**. As soon as a
-  move empties a pile and the talon still has cards, the talon auto-refills it
-  immediately — so the working row stays full while the talon lasts.
+* The **working row** only accepts a card onto an **empty pile**. A pile that
+  empties stays open as a free cell until the next deal.
 * Press `d` to deal one card from the talon onto **all eight** working-row
   piles at once, even non-empty ones.
 * `f` sends a card to its foundation or, failing that, onto the first empty
