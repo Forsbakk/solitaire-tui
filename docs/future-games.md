@@ -1,7 +1,7 @@
 # Future games
 
-The crate plays Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette and
-Spider, and a variant is now one file in `src/rules/` plus a line in `rules::games()`. So the question is
+The crate plays Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette,
+Spider and Mod3, and a variant is now one file in `src/rules/` plus a line in `rules::games()`. So the question is
 no longer "what would it take to support a second game" but simply which games are worth
 adding and what each still needs from the shared code. This file is a candidate list, not a
 commitment. Entries are grouped by cost.
@@ -33,6 +33,8 @@ commitment. Entries are grouped by cost.
 | Two games differing by three parameters, via one `Setup` struct | `src/rules/spider.rs`, `src/rules/spiderette.rs` | Yes, as the pattern to copy when it is more than a predicate |
 | Cards leaving play — steps appended to the move's own `Action` | `src/rules/spider.rs` `with_filing` | Yes, as the pattern to copy |
 | A stock that deals onto every column at once, repeatedly | `src/rules/spider.rs` | Yes |
+| A stock that auto-refills emptied tableau piles mid-move — steps appended to the player's `Action` | `src/rules/mod3.rs` `with_autofill` | Yes, as the pattern to copy |
+| Foundations whose base rank is not Ace (2, 3, or 4) and that build in steps larger than one | `src/rules/mod3.rs` `foundation_check` | Yes, as a worked example |
 | A board ten columns wide, with `0` as the tenth shortcut | `src/rules/spider.rs`, `src/app.rs` | Yes — `board_width` sizes it at 69 cells |
 
 What still does not exist: `PileKind::Reserve` (deliberately not added until a game needs
@@ -107,6 +109,24 @@ limit in `check`. Three things were worth more than they looked:
   calls a cell "an empty pile".
 
 `Build` moved from `yukon.rs` to `rules/mod.rs` on the way, since three games now share it.
+
+### Mod3 — shipped
+
+`src/rules/mod3.rs`. Two decks, a 4×8 grid, foundations building in steps of
+three. Two things were worth more than they looked:
+
+- **Auto-fill used the same `with_filing` shape as Spider**, not a separate
+  mechanism. When a player move empties a working-row pile, the action that
+  caused it gets extra `Step`s appended (computed against a scratch clone, each
+  step's flags against the state it will actually meet). One `u` undoes the
+  move and the refill together, and `app.rs` never learns what a refill is.
+- **The `WrongTarget` guard for stock and aces sources had to come before the
+  face-up guard.** Stock cards are face down; without that ordering, picking up
+  from the stock returned `FaceDown` instead of `WrongTarget`, which is a
+  misleading error. Lesson: guards on the source pile's *kind* go first.
+
+`with_autofill` is the pattern to copy for any game where a player move
+triggers an automatic deal step.
 
 ### Baker's Game and Seahaven Towers
 

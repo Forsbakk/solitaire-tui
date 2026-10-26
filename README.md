@@ -2,9 +2,9 @@
 
 [![ci](https://github.com/Forsbakk/solitaire-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/Forsbakk/solitaire-tui/actions/workflows/ci.yml)
 
-Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Seven games
-so far — Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette and
-Spider — chosen from a menu at startup.
+Solitaire in the terminal, built with [ratatui](https://ratatui.rs). Eight games
+so far — Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette,
+Spider and Mod3 — chosen from a menu at startup.
 
 ```
 ╭ Games ─────────────╮╭ Klondike ────────────────────────────────────────╮
@@ -15,7 +15,7 @@ Spider — chosen from a menu at startup.
 │   Russian          ││ Turn the stock for more cards, and build the     │
 │   Spiderette       ││ four foundations up in suit from the Ace. Win by │
 │   Spider           ││ sending all 52 cards home.                       │
-│                    ││                                                  │
+│   Mod3             ││                                                  │
 │                    ││ Rules                                            │
 │                    ││   Draw      ‹ 3 ›                                │
 │                    ││   Redeals   ‹ unlimited ›                        │
@@ -256,6 +256,26 @@ Rules you can change: **Suits** (1, 2 or 4), defaulting to 1. One-suit Spider is
 the most forgiving game here and a good first patience in a terminal. The suit
 count repaints one deal rather than dealing a different one, so `--seed 42` is
 the same board at all three difficulties.
+
+### Mod3
+
+Two decks, 32 piles in a 4×8 grid — three rows of foundations above a working
+row — and a talon.
+
+* The three **foundation rows** each build in suit in steps of three:
+  * **Row 1** — 2 → 5 → 8 → J, same suit per pile
+  * **Row 2** — 3 → 6 → 9 → Q, same suit per pile
+  * **Row 3** — 4 → 7 → 10 → K, same suit per pile
+* **Aces** go to a separate pile and sit there for good. All eight must be
+  placed to win.
+* The **working row** only accepts a card onto an **empty pile**. As soon as a
+  move empties a pile and the talon still has cards, the talon auto-refills it
+  immediately — so the working row stays full while the talon lasts.
+* Press `d` to deal one card from the talon onto **all eight** working-row
+  piles at once, even non-empty ones.
+* `f` sends a card to its foundation or, failing that, onto the first empty
+  working-row pile. Once only foundation moves remain, `A` plays out the rest.
+* Win by completing all 24 foundation sequences and placing all 8 Aces.
 
 ## Keys
 
