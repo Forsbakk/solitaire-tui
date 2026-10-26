@@ -10,6 +10,7 @@
 
 pub mod freecell;
 pub mod klondike;
+pub mod mod3;
 pub mod russian;
 pub mod scorpion;
 pub mod spider;
@@ -247,6 +248,7 @@ pub fn games() -> Vec<Box<dyn Rules>> {
         Box::new(russian::Russian),
         Box::new(spiderette::Spiderette),
         Box::new(spider::Spider::default()),
+        Box::new(mod3::Mod3),
     ]
 }
 
