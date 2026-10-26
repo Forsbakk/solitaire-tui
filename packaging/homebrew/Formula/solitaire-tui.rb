@@ -7,28 +7,28 @@
 class SolitaireTui < Formula
   desc "Eight solitaire games in the terminal, built with ratatui"
   homepage "https://github.com/Forsbakk/solitaire-tui"
-  version "0.4.0"
+  version "0.4.1"
   license any_of: ["MIT", "Apache-2.0"]
 
   on_macos do
     on_arm do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-aarch64-apple-darwin.tar.gz"
-      sha256 "dc8dc2988c09fc69b188a9eb9bd6004c19709986e9fc059ad4af5cbb87f15a2d"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.1/solitaire-tui-v0.4.1-aarch64-apple-darwin.tar.gz"
+      sha256 "fb0fe6f0971f6b2cff2d3c4115df2af611be8549d82822e9e1d2d4c263773569"
     end
     on_intel do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-x86_64-apple-darwin.tar.gz"
-      sha256 "a85753898558a1f811a715470919ee5100623addd23aa393db148b0d45d0b1a3"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.1/solitaire-tui-v0.4.1-x86_64-apple-darwin.tar.gz"
+      sha256 "c112af001f43f9452df135b2dd32102e56fe63a63bba5f0f57b62109deed6217"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "aed9ce046ffa037328f66d1ff9753da5ce3998e57a26953cc70d63647b0d678e"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.1/solitaire-tui-v0.4.1-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "08cf887541ee91555c9ff122c52f077241b3316f58a23143599cc0b58b735157"
     end
     on_intel do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "cb1e5e8f09fd3e8f6567e59a5c050bbbaff295315bde750632dbbb99ab6105d4"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.1/solitaire-tui-v0.4.1-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "ac77f3115c4278755efe3ade185cbbebcd4f024be57ba392d425bdd254d9b5fa"
     end
   end
 
