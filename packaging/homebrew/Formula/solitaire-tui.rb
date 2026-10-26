@@ -5,30 +5,30 @@
 # The macOS binaries are built on macOS runners, so the native linker has
 # ad-hoc signed them and Apple Silicon will run them.
 class SolitaireTui < Formula
-  desc "Seven solitaire games in the terminal, built with ratatui"
+  desc "Eight solitaire games in the terminal, built with ratatui"
   homepage "https://github.com/Forsbakk/solitaire-tui"
-  version "0.3.0"
+  version "0.4.0"
   license any_of: ["MIT", "Apache-2.0"]
 
   on_macos do
     on_arm do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.3.0/solitaire-tui-v0.3.0-aarch64-apple-darwin.tar.gz"
-      sha256 "58f0e19bc6eb821b67140d17dc3091ed10b167c09198607d635896dff2615efa"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-aarch64-apple-darwin.tar.gz"
+      sha256 "dc8dc2988c09fc69b188a9eb9bd6004c19709986e9fc059ad4af5cbb87f15a2d"
     end
     on_intel do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.3.0/solitaire-tui-v0.3.0-x86_64-apple-darwin.tar.gz"
-      sha256 "0cab17c0162ce63f8e47e651e82f25310821c816ca40c599768b7235e0ee8b04"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-x86_64-apple-darwin.tar.gz"
+      sha256 "a85753898558a1f811a715470919ee5100623addd23aa393db148b0d45d0b1a3"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.3.0/solitaire-tui-v0.3.0-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "8656457ea9086ba36db2435e8de5137237e19643d95bb228a8a109957a12875d"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "aed9ce046ffa037328f66d1ff9753da5ce3998e57a26953cc70d63647b0d678e"
     end
     on_intel do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.3.0/solitaire-tui-v0.3.0-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "b6f413662bbdd5a2b059c42653695eecf92c467ee5460e131b74accdec4a3703"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.0/solitaire-tui-v0.4.0-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "cb1e5e8f09fd3e8f6567e59a5c050bbbaff295315bde750632dbbb99ab6105d4"
     end
   end
 
