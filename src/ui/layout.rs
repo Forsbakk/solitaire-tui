@@ -206,36 +206,56 @@ pub fn compute(
 
     // Fixed rows take a card's height each; whatever is left over is shared by
     // the fanned rows, which is where the cards actually pile up.
-    let fanned_rows = (0..rows).filter(|&row| is_fanned(spec, row)).count() as u16;
-    let fixed: u16 = (0..rows)
-        .filter(|&row| !is_fanned(spec, row))
-        .map(|_| CARD_H)
-        .sum();
+    let fanned: Vec<u8> = (0..rows).filter(|&row| is_fanned(spec, row)).collect();
+    let fixed = CARD_H * (u16::from(rows) - fanned.len() as u16);
     let gaps = ROW_GAP * u16::from(rows - 1);
-    let fan_height = (area.height - fixed - gaps)
-        .checked_div(fanned_rows)
-        .unwrap_or(0);
+    let space = area.height - fixed - gaps;
 
-    let longest = spec
-        .spots
+    let longest: Vec<usize> = fanned
         .iter()
-        .filter(|spot| spot.fan == Fan::Down)
-        .map(|spot| lengths[spot.pile])
-        .max()
-        .unwrap_or(0);
-    let density = if roomy_height(longest) <= fan_height {
+        .map(|&row| {
+            spec.row(row)
+                .filter(|spot| spot.fan == Fan::Down)
+                .map(|spot| lengths[spot.pile])
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    let need = |height: fn(usize) -> u16| -> Vec<u16> {
+        longest.iter().map(|&n| height(n).max(CARD_H)).collect()
+    };
+    let roomy = need(roomy_height);
+    let density = if roomy.iter().sum::<u16>() <= space {
         Density::Roomy
     } else {
         Density::Tight
     };
+    let mut heights = match density {
+        Density::Roomy => roomy,
+        Density::Tight => need(tight_height),
+    };
+    // Rows are sized by what they hold, so a foundation row grows as its
+    // stacks do instead of claiming height it does not use. Spare height goes
+    // to the last fanned row — the working row — so rows above it do not jump
+    // about as the lower one fills; a shortfall is taken from the tallest until
+    // everything fits (the pile then elides).
+    let total: u16 = heights.iter().sum();
+    if let Some(last) = heights.last_mut().filter(|_| total < space) {
+        *last += space - total;
+    }
+    while heights.iter().sum::<u16>() > space {
+        let tallest = (0..heights.len()).max_by_key(|&i| heights[i]).unwrap_or(0);
+        heights[tallest] -= 1;
+    }
 
     let x0 = area.x + (area.width - board_width(spec)) / 2;
     let mut piles = Vec::with_capacity(spec.spots.len());
     let mut y = area.y;
 
     for row in 0..rows {
-        let fanned = is_fanned(spec, row);
-        let height = if fanned { fan_height } else { CARD_H };
+        let fan_index = fanned.iter().position(|&r| r == row);
+        let fanned = fan_index.is_some();
+        let height = fan_index.map_or(CARD_H, |i| heights[i]);
         for spot in spec.row(row) {
             let x = x0 + spot.slot * (CARD_W + CARD_GAP);
             let mut pile = match spot.fan {
@@ -253,8 +273,13 @@ pub fn compute(
             };
             // A fanned pile answers for every row beneath it, so a click below
             // a short pile still lands on it.
-            pile.claim_bottom = if fanned {
+            // Only the last row reaches the bottom of the board; an earlier
+            // fanned row stops at its own allocation or it would shadow the
+            // piles beneath it.
+            pile.claim_bottom = if fanned && row + 1 == rows {
                 area.y + area.height
+            } else if fanned {
+                y + height
             } else {
                 y + CARD_H
             };
@@ -492,6 +517,58 @@ mod tests {
                 pile.pile
             );
         }
+    }
+
+    /// A short fanned row above a deep one — Mod3's foundations over its
+    /// working row.
+    fn stacked_fans_spec() -> BoardSpec {
+        let mut spots: Vec<Spot> = (0..3)
+            .map(|i| Spot::new(i, 0, i as u16, Fan::Down))
+            .collect();
+        spots.extend((0..3).map(|i| Spot::new(3 + i, 1, i as u16, Fan::Down)));
+        BoardSpec::new(spots)
+    }
+
+    #[test]
+    fn a_shallow_fanned_row_does_not_starve_the_deep_one_below_it() {
+        let spec = stacked_fans_spec();
+        let lengths = [4, 2, 1, 15, 3, 1];
+        let pins = [None; 6];
+        let layout = compute(&spec, &lengths, area(30, 24), &pins).expect("fits");
+        assert_slots_round_trip(&layout);
+
+        let upper = layout.pile(0).unwrap();
+        let lower = layout.pile(3).unwrap();
+        assert_eq!(layout.density, Density::Tight);
+        // All four upper cards are on screen, none elided.
+        assert_eq!(upper.slots.len(), 4);
+        assert!(upper.elision.is_none());
+        // The deep row got everything the upper one did not need.
+        assert!(lower.slots.len() >= 10, "{} cards shown", lower.slots.len());
+    }
+
+    #[test]
+    fn a_fanned_row_grows_and_shrinks_with_what_it_holds() {
+        let spec = stacked_fans_spec();
+        let height = |lengths: [usize; 6]| {
+            let layout = compute(&spec, &lengths, area(30, 24), &[None; 6]).expect("fits");
+            assert_slots_round_trip(&layout);
+            layout.pile(3).unwrap().top
+        };
+        // Single cards up top leave the lower row starting right under them.
+        let flat = height([1, 1, 1, 1, 1, 1]);
+        let stacked = height([4, 3, 2, 1, 1, 1]);
+        assert!(stacked > flat, "{stacked} should sit below {flat}");
+    }
+
+    #[test]
+    fn a_click_below_an_upper_fanned_row_lands_on_the_row_beneath_it() {
+        let spec = stacked_fans_spec();
+        let lengths = [4, 2, 1, 1, 1, 1];
+        let layout = compute(&spec, &lengths, area(30, 24), &[None; 6]).expect("fits");
+        let lower = layout.pile(3).unwrap();
+        let hit = layout.hit(lower.x, lower.top + 1).expect("on the board");
+        assert_eq!(hit.pile, 3);
     }
 
     #[test]

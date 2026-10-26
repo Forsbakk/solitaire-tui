@@ -134,7 +134,8 @@ A game declares a `BoardSpec` of `Spot`s — a pile, a row, a slot, and a `Fan`:
 `Down` (cards overlap downwards), `None` (only the exposed card shows), or
 `Right(n)` (the last `n` overlap rightwards, Klondike's waste).
 `layout::compute` places fixed rows at `CARD_H` each and gives the remaining
-height to the fanned row. `render.rs` draws *from* the resulting `BoardLayout`,
+height to the fanned rows, each sized by its deepest pile (spare height goes to the last
+fanned row; Mod3 stacks three shallow foundation rows over a deep working row). `render.rs` draws *from* the resulting `BoardLayout`,
 and mouse clicks resolve *against* it via `hit()`. `Session` stores the layout
 from the last frame so clicks match what was actually drawn.
 

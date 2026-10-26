@@ -94,17 +94,18 @@ impl Rules for Mod3 {
         spots.push(Spot::new(STOCK, 0, 0, Fan::None));
         spots.push(Spot::new(ACES, 0, 7, Fan::None));
 
+        // Rows 1–3: the foundations fan down so every card in a stack can be read.
         // Row 1: FOUND_2 (2→5→8→J).
         for i in 0..ROWS {
-            spots.push(Spot::new(FOUND_2 + i, 1, i as u16, Fan::None));
+            spots.push(Spot::new(FOUND_2 + i, 1, i as u16, Fan::Down));
         }
         // Row 2: FOUND_3 (3→6→9→Q).
         for i in 0..ROWS {
-            spots.push(Spot::new(FOUND_3 + i, 2, i as u16, Fan::None));
+            spots.push(Spot::new(FOUND_3 + i, 2, i as u16, Fan::Down));
         }
         // Row 3: FOUND_4 (4→7→10→K).
         for i in 0..ROWS {
-            spots.push(Spot::new(FOUND_4 + i, 3, i as u16, Fan::None));
+            spots.push(Spot::new(FOUND_4 + i, 3, i as u16, Fan::Down));
         }
         // Row 4: working row. Fan::Down so talon deals can stack.
         for i in 0..ROWS {

@@ -266,6 +266,8 @@ row — and a talon.
   * **Row 1** — 2 → 5 → 8 → J, same suit per pile
   * **Row 2** — 3 → 6 → 9 → Q, same suit per pile
   * **Row 3** — 4 → 7 → 10 → K, same suit per pile
+* Each foundation pile fans downwards and its row grows with its tallest stack, so a whole stack can be read at a glance.
+  The board is tall — about 31 rows at least.
 * **Aces** go to a separate pile and sit there for good. All eight must be
   placed to win.
 * The **working row** only accepts a card onto an **empty pile**. As soon as a
