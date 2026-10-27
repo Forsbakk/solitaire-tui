@@ -7,28 +7,28 @@
 class SolitaireTui < Formula
   desc "Eight solitaire games in the terminal, built with ratatui"
   homepage "https://github.com/Forsbakk/solitaire-tui"
-  version "0.4.2"
+  version "0.4.3"
   license any_of: ["MIT", "Apache-2.0"]
 
   on_macos do
     on_arm do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.2/solitaire-tui-v0.4.2-aarch64-apple-darwin.tar.gz"
-      sha256 "97359f4c57b7a1e1835e05d609a5cab96558a6712f3c7ce142fe0d860474bb94"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.3/solitaire-tui-v0.4.3-aarch64-apple-darwin.tar.gz"
+      sha256 "3f30ce1507c3073f0713031d5035869206f5a6118b0038f95c4774133b1fba1e"
     end
     on_intel do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.2/solitaire-tui-v0.4.2-x86_64-apple-darwin.tar.gz"
-      sha256 "93fc2a194f828ccf61edb21dca0c3ca6cf8ff285d4b5850c6d6bdb959a811947"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.3/solitaire-tui-v0.4.3-x86_64-apple-darwin.tar.gz"
+      sha256 "9d595d5e131f8399de66a462a0be2710a5d318d7d7d1443ad23556f11806e66e"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.2/solitaire-tui-v0.4.2-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "18f57bd0562f9b0861c93ed849315e328a21da64cfe18dd2ee358f83d29959e4"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.3/solitaire-tui-v0.4.3-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "9ec0d8371334c0fcae1a8e4319932fee3b1f3471840af597334b89f721ada29b"
     end
     on_intel do
-      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.2/solitaire-tui-v0.4.2-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "fa25670ab407fc0604028ab2950c86923543a74395a73be872cfe8051e0bb5bc"
+      url "https://github.com/Forsbakk/solitaire-tui/releases/download/v0.4.3/solitaire-tui-v0.4.3-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "7a863f3592b15be58ffe07f7b20b81b10288f2365c2960d986a1283672612f0c"
     end
   end
 
