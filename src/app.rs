@@ -30,8 +30,10 @@ pub struct Session {
     rules: Box<dyn Rules>,
     board: Board,
     spec: BoardSpec,
-    /// The fanned piles in screen order — what the digit keys jump to.
-    tableau: Vec<PileId>,
+    /// The fanned piles by column, each listed top to bottom — what the digit
+    /// keys jump to. Most games have one fanned pile per column; Mod3 stacks
+    /// four, and a digit names the column rather than any one of them.
+    columns: Vec<Vec<PileId>>,
     cursor_pile: PileId,
     cursor_card: Option<usize>,
     /// The held tail, as `(pile, first card)`.
@@ -51,13 +53,13 @@ impl Session {
     pub fn new(rules: Box<dyn Rules>, seed: u64) -> Self {
         let board = rules.deal(seed);
         let spec = rules.spec(&board);
-        let tableau = ordered(&spec, Fan::Down);
+        let columns = columns(&spec);
         let mut session = Self {
-            cursor_pile: tableau.first().copied().unwrap_or(0),
+            cursor_pile: first_pile(&columns),
             rules,
             board,
             spec,
-            tableau,
+            columns,
             cursor_card: None,
             selection: None,
             hint: None,
@@ -133,7 +135,7 @@ impl Session {
             render::draw_labels(
                 frame.buffer_mut(),
                 board_layout,
-                &self.tableau,
+                &self.columns,
                 self.cursor_pile,
             );
         }
@@ -211,7 +213,7 @@ impl Session {
             KeyCode::Up | KeyCode::Char('k') => self.step_card(-1),
             KeyCode::Down | KeyCode::Char('j') => self.step_card(1),
             KeyCode::Char(' ') | KeyCode::Enter => self.activate(),
-            // `0` is the tenth pile, so a Spider board's shortcuts run 1…9
+            // `0` is the tenth column, so a Spider board's shortcuts run 1…9
             // then 0 — which is how `render::draw_labels` numbers them too.
             KeyCode::Char(digit @ ('1'..='9' | '0')) => {
                 let index = if digit == '0' {
@@ -219,14 +221,7 @@ impl Session {
                 } else {
                     digit as usize - '1' as usize
                 };
-                if let Some(&pile) = self.tableau.get(index) {
-                    if self.selection.is_some() {
-                        self.drop_on(pile);
-                    } else {
-                        self.cursor_pile = pile;
-                        self.snap_cursor();
-                    }
-                }
+                self.jump_to_column(index);
             }
             _ => {}
         }
@@ -309,6 +304,38 @@ impl Session {
         self.spec
             .spot(pile)
             .map_or((0, 0), |spot| (spot.row, spot.slot))
+    }
+
+    /// A digit key: drop the held tail on whichever pile of the column takes
+    /// it, or move the cursor there — staying in its own row when the column
+    /// has a pile in it.
+    fn jump_to_column(&mut self, index: usize) {
+        let Some(column) = self.columns.get(index) else {
+            return;
+        };
+        let (row, _) = self.place(self.cursor_pile);
+        let in_row = column.iter().copied().find(|&p| self.place(p).0 == row);
+        let fallback = in_row.or(column.last().copied());
+        match self.selection {
+            Some((from, at)) => {
+                let takes = column.iter().copied().find(|&to| {
+                    self.rules
+                        .check(&self.board, Move::new(from, at, to))
+                        .is_ok()
+                });
+                // When nothing in the column takes it, aim at the obvious pile
+                // so the refusal explains itself.
+                if let Some(target) = takes.or(fallback) {
+                    self.drop_on(target);
+                }
+            }
+            None => {
+                if let Some(pile) = fallback {
+                    self.cursor_pile = pile;
+                    self.snap_cursor();
+                }
+            }
+        }
     }
 
     /// Walk to the next pile along the cursor's own row, wrapping.
@@ -541,8 +568,8 @@ impl Session {
     fn restart(&mut self, seed: u64) {
         self.board = self.rules.deal(seed);
         self.spec = self.rules.spec(&self.board);
-        self.tableau = ordered(&self.spec, Fan::Down);
-        self.cursor_pile = self.tableau.first().copied().unwrap_or(0);
+        self.columns = columns(&self.spec);
+        self.cursor_pile = first_pile(&self.columns);
         self.selection = None;
         self.hint = None;
         self.history.clear();
@@ -632,10 +659,32 @@ impl Session {
 }
 
 /// The piles drawn with `fan`, in reading order.
-fn ordered(spec: &BoardSpec, fan: Fan) -> Vec<PileId> {
-    let mut spots: Vec<_> = spec.spots.iter().filter(|spot| spot.fan == fan).collect();
-    spots.sort_by_key(|spot| (spot.row, spot.slot));
-    spots.iter().map(|spot| spot.pile).collect()
+fn columns(spec: &BoardSpec) -> Vec<Vec<PileId>> {
+    let mut spots: Vec<_> = spec
+        .spots
+        .iter()
+        .filter(|spot| spot.fan == Fan::Down)
+        .collect();
+    spots.sort_by_key(|spot| (spot.slot, spot.row));
+    let mut columns: Vec<Vec<PileId>> = Vec::new();
+    let mut slot = None;
+    for spot in spots {
+        if slot != Some(spot.slot) {
+            columns.push(Vec::new());
+            slot = Some(spot.slot);
+        }
+        columns.last_mut().expect("just pushed").push(spot.pile);
+    }
+    columns
+}
+
+/// Where the cursor starts: the top of the first column.
+fn first_pile(columns: &[Vec<PileId>]) -> PileId {
+    columns
+        .first()
+        .and_then(|c| c.first())
+        .copied()
+        .unwrap_or(0)
 }
 
 /// The piles in `row`, left to right.
@@ -1300,7 +1349,7 @@ mod tests {
     #[test]
     fn the_cursor_walks_between_the_rows() {
         let mut session = klondike(42);
-        let tableau = session.tableau.clone();
+        let tableau: Vec<PileId> = session.columns.concat();
         assert_eq!(session.cursor_pile, tableau[0], "starts on the tableau");
 
         press(&mut session, KeyCode::Up);
@@ -1933,6 +1982,62 @@ mod tests {
             "the tenth pile is labelled 0: {labels:?}",
         );
         assert!(!labels.contains("10"), "which is the key, not its ordinal");
+    }
+
+    fn mod3(seed: u64) -> Session {
+        Session::new(Box::new(crate::rules::mod3::Mod3), seed)
+    }
+
+    #[test]
+    fn a_column_of_several_fanned_piles_is_numbered_once() {
+        let mut session = mod3(42);
+        let view = screen(&mut session, 80, 40);
+        println!("{view}");
+
+        let labels: Vec<&str> = view
+            .lines()
+            .find(|line| line.contains("[1]"))
+            .expect("the columns are numbered")
+            .split_whitespace()
+            .collect();
+        // Every fanned row used to number itself into this one line, so the
+        // working row's 5…2 overwrote the rest.
+        assert_eq!(labels, ["[1]", "2", "3", "4", "5", "6", "7", "8"]);
+    }
+
+    #[test]
+    fn a_digit_drops_on_whichever_pile_of_its_column_takes_the_card() {
+        // Mod3's piles: working row 0–7, then the 2-, 3- and 4-rows, talon,
+        // aces. Every row spot holds a misplaced 9♣ but column six's 2-row
+        // spot, which is bare and so takes a 2.
+        let mut piles: Vec<Pile> = (0..8)
+            .map(|_| Pile::tableau(0, &[Card::new(10, Suit::Clubs)]))
+            .collect();
+        piles[0] = Pile::tableau(0, &[Card::new(2, Suit::Hearts)]);
+        piles.extend((0..24).map(|i| {
+            let cards: &[Card] = if i == 5 {
+                &[]
+            } else {
+                &[Card::new(9, Suit::Clubs)]
+            };
+            Pile::holding(PileKind::Foundation, 0, cards)
+        }));
+        piles.push(Pile::new(PileKind::Stock));
+        piles.push(Pile::new(PileKind::Foundation));
+
+        let mut session = mod3(42);
+        session.board = Board::new(0, piles);
+        session.cursor_pile = 0;
+        session.snap_cursor();
+        press(&mut session, KeyCode::Char(' '));
+        assert!(session.selection.is_some(), "2♥ is held");
+
+        press(&mut session, KeyCode::Char('6'));
+        assert_eq!(
+            session.board.pile(8 + 5).exposed(),
+            Some(Card::new(2, Suit::Hearts)),
+            "the 2 went to column six's 2-row, not its working pile",
+        );
     }
 
     #[test]

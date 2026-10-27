@@ -537,8 +537,11 @@ What you get automatically:
   bottom of the board, so clicking below a short pile still targets it.
 - **Sizing** — `board_width` and `min_board_height` derive from the spec, so the
   "terminal too small" threshold is correct without being told.
-- **Digit keys** — `1`…`9` map to the `Fan::Down` piles in reading order.
-- **Labels** — the numbered row is drawn directly above the tableau.
+- **Digit keys** — `1`…`9` map to the columns of `Fan::Down` piles, left to
+  right. A column with several fanned rows (Mod3) is one key: it moves the
+  cursor within the cursor's own row, and drops a held card on the first pile
+  of the column that `check` accepts.
+- **Labels** — each column is numbered once, directly above its top fanned pile.
 
 A pile with no `Spot` is not drawn. That is legitimate: Scorpion's stock holds
 cards but appears only as a status-bar count.

@@ -11,7 +11,7 @@ cargo run --release -- --game klondike --rule draw=1  # set a game's rules
 cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck board
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 249 tests
+cargo test                          # all 273 tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 

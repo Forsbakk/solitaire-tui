@@ -114,10 +114,17 @@ limit in `check`. Three things were worth more than they looked:
 `src/rules/mod3.rs`. Two decks, a 4×8 grid, foundations building in steps of
 three. Two things were worth more than they looked:
 
-- **Auto-fill was tried and removed.** Refilling emptied working-row piles
-  from the talon was appended to the player's `Action` the way Spider files a
-  run, but KPatience has no such rule — gaps are the game's free cells — and
-  `send_home` bypassed it, so the same move behaved differently by input path.
+- **Check KPatience's source, not a description of it.** Release 0.4.2
+  removed the talon refill of emptied working-row piles on the belief that
+  KPatience had none; its `Mod3::cardsMoved` does refill them, and its
+  `checkAdd` builds only on a pile whose *bottom* card is the row's base. Both
+  are now in. The refill is appended to the player's `Action` the way Spider
+  files a run, and `send_home` goes through `action_for` so every input path
+  refills alike.
+- **A board can have several fanned rows.** The digit keys and their labels
+  name *columns*; a digit drops a held card on whichever pile of its column
+  takes it. Every other game has one fanned pile per column, so nothing else
+  changed.
 - **The `WrongTarget` guard for stock and aces sources had to come before the
   face-up guard.** Stock cards are face down; without that ordering, picking up
   from the stock returned `FaceDown` instead of `WrongTarget`, which is a

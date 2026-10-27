@@ -1,5 +1,8 @@
 //! Mod 3 — two decks, a grid of piles, and foundations built by threes.
 //!
+//! The rules follow KDE KPatience's `mod3.cpp`, which is the reference for any
+//! question about how this game should play.
+//!
 //! * Two 52-card decks (104 cards). The eight Aces are held on their own pile
 //!   and are never built upon — they simply leave the grid.
 //! * The board has a 4×8 grid of 32 piles, plus a talon and the aces pile.
@@ -8,10 +11,15 @@
 //! * Row 1 builds 2→5→8→J in the same suit.
 //! * Row 2 builds 3→6→9→Q in the same suit.
 //! * Row 3 builds 4→7→10→K in the same suit.
+//! * An empty spot in rows 1–3 takes only that row's base card. A pile is
+//!   built on only if its bottom card is that base: a card dealt into the
+//!   wrong spot is *misplaced*, can never be built on, and is there to be
+//!   moved off. The top card of any of these piles may be moved.
 //! * Row 4 (the working row) holds cards as a staging area. A player move may
 //!   only land on an empty working-row pile. Pressing `d` deals one card from
 //!   the talon onto each of the eight working-row piles (even non-empty ones).
-//!   A pile that empties stays empty — a free cell — until the next deal.
+//!   A working-row pile that a move empties is refilled from the talon at
+//!   once, so free cells only appear once the talon is spent.
 //! * You win when all 24 sequence piles are complete and all 8 Aces are placed.
 
 use crate::board::{
@@ -50,9 +58,12 @@ impl Rules for Mod3 {
         "Two decks, 32 piles. Build foundations upward by three in the same \
          suit: 2–5–8–J in the first row, 3–6–9–Q in the second, 4–7–10–K in \
          the third. Aces leave for their own pile.\n\n\
+         A card dealt into the wrong spot can never be built on — move it to \
+         where it belongs, and the spot it leaves takes only its row's base \
+         card.\n\n\
          The fourth row is a working area. Press d to deal one card onto each \
-         of its eight piles. A working-row pile that empties stays open as a \
-         free cell until the next deal."
+         of its eight piles. A working-row pile that empties is refilled from \
+         the talon; once the talon is spent, it stays open as a free cell."
     }
 
     fn help(&self) -> &'static str {
@@ -90,27 +101,24 @@ impl Rules for Mod3 {
     fn spec(&self, _board: &Board) -> BoardSpec {
         let mut spots = Vec::new();
 
-        // Row 0: talon at left, aces pile at right.
-        spots.push(Spot::new(STOCK, 0, 0, Fan::None));
-        spots.push(Spot::new(ACES, 0, 7, Fan::None));
-
-        // Rows 1–3: the foundations fan down so every card in a stack can be read.
-        // Row 1: FOUND_2 (2→5→8→J).
-        for i in 0..ROWS {
-            spots.push(Spot::new(FOUND_2 + i, 1, i as u16, Fan::Down));
+        // As in KPatience, the aces and the talon take a ninth column rather
+        // than a row of their own: aces beside the first foundation row, the
+        // talon beside the working row it deals onto. A header row would cost
+        // four lines of terminal height for two piles.
+        //
+        // Rows 0–2: the foundations fan down so every card in a stack can be
+        // read — FOUND_2 (2→5→8→J), FOUND_3 (3→6→9→Q), FOUND_4 (4→7→10→K).
+        for (row, first) in [FOUND_2, FOUND_3, FOUND_4].into_iter().enumerate() {
+            for i in 0..ROWS {
+                spots.push(Spot::new(first + i, row as u8, i as u16, Fan::Down));
+            }
         }
-        // Row 2: FOUND_3 (3→6→9→Q).
+        spots.push(Spot::new(ACES, 0, ROWS as u16, Fan::None));
+        // Row 3: working row. Fan::Down so talon deals can stack.
         for i in 0..ROWS {
-            spots.push(Spot::new(FOUND_3 + i, 2, i as u16, Fan::Down));
+            spots.push(Spot::new(TABLEAU + i, 3, i as u16, Fan::Down));
         }
-        // Row 3: FOUND_4 (4→7→10→K).
-        for i in 0..ROWS {
-            spots.push(Spot::new(FOUND_4 + i, 3, i as u16, Fan::Down));
-        }
-        // Row 4: working row. Fan::Down so talon deals can stack.
-        for i in 0..ROWS {
-            spots.push(Spot::new(TABLEAU + i, 4, i as u16, Fan::Down));
-        }
+        spots.push(Spot::new(STOCK, 3, ROWS as u16, Fan::None));
 
         BoardSpec::new(spots)
     }
@@ -141,6 +149,9 @@ impl Rules for Mod3 {
         let card = source.cards()[index];
         let target = board.pile(to);
 
+        if let Some(base) = base_of(to) {
+            return foundation_check(target, card, base);
+        }
         match to {
             STOCK => Err(MoveError::WrongTarget),
             ACES => {
@@ -150,9 +161,6 @@ impl Rules for Mod3 {
                     Err(MoveError::Mismatch)
                 }
             }
-            t if (FOUND_2..FOUND_2 + ROWS).contains(&t) => foundation_check(target, card, 2),
-            t if (FOUND_3..FOUND_3 + ROWS).contains(&t) => foundation_check(target, card, 3),
-            t if (FOUND_4..FOUND_4 + ROWS).contains(&t) => foundation_check(target, card, 4),
             t if (TABLEAU..TABLEAU + ROWS).contains(&t) => {
                 if target.is_empty() {
                     Ok(())
@@ -162,6 +170,12 @@ impl Rules for Mod3 {
             }
             _ => Err(MoveError::WrongTarget),
         }
+    }
+
+    /// Every move is followed by refilling the pile it left, if that was a
+    /// working-row pile it emptied.
+    fn action_for(&self, board: &Board, mv: Move) -> Action {
+        with_refill(board, Action::moving(board, mv.from, mv.index, mv.to))
     }
 
     /// Deal one card from the talon onto each of the eight working-row piles.
@@ -193,24 +207,27 @@ impl Rules for Mod3 {
         if from == STOCK || from == ACES {
             return None;
         }
-        let source = board.pile(from);
-        let card = source.exposed()?;
-        let last = source.len() - 1;
+        // A card on a correctly based pile is already home.
+        if base_of(from).is_some() && !is_misplaced(board.pile(from), from) {
+            return None;
+        }
+        let card = board.pile(from).exposed()?;
+        let last = board.pile(from).len() - 1;
 
-        let dest = if card.rank == ACE {
-            // Send to the aces pile if it still has room.
-            (board.pile(ACES).len() < 8).then_some(ACES)?
+        // Asking `check` keeps `f` from ever disagreeing with a drag.
+        let mut homes = if card.rank == ACE {
+            ACES..ACES + 1
         } else {
-            let (mut range, base): (std::ops::Range<PileId>, u8) = match card.rank % 3 {
-                2 => (FOUND_2..FOUND_2 + ROWS, 2),
-                0 => (FOUND_3..FOUND_3 + ROWS, 3),
-                1 => (FOUND_4..FOUND_4 + ROWS, 4),
-                _ => unreachable!(),
+            let first = match card.rank % 3 {
+                2 => FOUND_2,
+                0 => FOUND_3,
+                _ => FOUND_4,
             };
-            range.find(|&p| foundation_takes(board, p, card, base))?
+            first..first + ROWS
         };
+        let dest = homes.find(|&to| self.check(board, Move::new(from, last, to)).is_ok())?;
 
-        Some(Action::moving(board, from, last, dest))
+        Some(self.action_for(board, Move::new(from, last, dest)))
     }
 
     fn is_won(&self, board: &Board) -> bool {
@@ -221,29 +238,41 @@ impl Rules for Mod3 {
     }
 
     fn is_useful(&self, board: &Board, mv: Move) -> bool {
-        // Moving FROM a sequence foundation is only worthwhile when placing an
-        // Ace onto the aces pile (which can happen if an Ace was dealt there).
-        if board.pile(mv.from).kind() == PileKind::Foundation {
-            return mv.to == ACES && board.pile(mv.from).exposed().is_some_and(|c| c.rank == ACE);
+        let source = board.pile(mv.from);
+        if base_of(mv.from).is_some() {
+            // A misplaced card is there to be moved off — home, to the aces,
+            // or out of the way into the working row. A card on a correctly
+            // based pile may legally move too, but only ever backwards.
+            return is_misplaced(source, mv.from);
         }
-        true
+        // Sliding a lone working-row card into another empty pile changes
+        // nothing; with cards beneath it, it exposes the next one.
+        !(base_of(mv.to).is_none() && mv.to != ACES && source.len() == 1)
     }
 
     fn rank(&self, board: &Board, mv: Move) -> i32 {
+        // Moving a misplaced card frees a spot for its row's base card, on
+        // top of whatever the move itself achieves.
+        let frees = if is_misplaced(board.pile(mv.from), mv.from) {
+            5
+        } else {
+            0
+        };
         if mv.to == ACES {
-            return 80;
+            return 80 + frees;
         }
-        if (FOUND_2..FOUND_4 + ROWS).contains(&mv.to) {
+        if base_of(mv.to).is_some() {
             // Continuing an existing sequence beats starting a new one slightly,
             // to prefer making progress over claiming new slots.
-            return if board.pile(mv.to).is_empty() {
-                90
-            } else {
-                100
-            };
+            return frees
+                + if board.pile(mv.to).is_empty() {
+                    90
+                } else {
+                    100
+                };
         }
         // Parking to an empty working-row pile.
-        10
+        10 + frees
     }
 
     fn has_progress_move(&self, board: &Board) -> bool {
@@ -271,11 +300,23 @@ impl Rules for Mod3 {
     }
 }
 
-/// Whether `card` may be placed on `pile`, which builds from `base` upward by 3.
-fn foundation_takes(board: &Board, pile: PileId, card: Card, base: u8) -> bool {
-    match board.pile(pile).exposed() {
-        None => card.rank == base,
-        Some(top) => top.suit == card.suit && card.rank == top.rank + 3,
+/// The rank a foundation row's piles are founded on, or `None` for a pile
+/// outside the three foundation rows.
+fn base_of(pile: PileId) -> Option<u8> {
+    match pile {
+        p if (FOUND_2..FOUND_2 + ROWS).contains(&p) => Some(2),
+        p if (FOUND_3..FOUND_3 + ROWS).contains(&p) => Some(3),
+        p if (FOUND_4..FOUND_4 + ROWS).contains(&p) => Some(4),
+        _ => None,
+    }
+}
+
+/// Whether foundation pile `id` holds a card dealt into the wrong spot: one
+/// whose bottom card is not its row's base, so it can never be built on.
+fn is_misplaced(pile: &Pile, id: PileId) -> bool {
+    match (base_of(id), pile.cards().first()) {
+        (Some(base), Some(bottom)) => bottom.rank != base,
+        _ => false,
     }
 }
 
@@ -293,8 +334,11 @@ fn foundation_check(target: &Pile, card: Card, base: u8) -> Result<(), MoveError
                 Err(MoveError::Mismatch)
             }
         }
+        // KPatience builds only on a pile founded on its row's base; a card
+        // dealt into the wrong spot takes nothing.
         Some(top) => {
-            if top.suit == card.suit && card.rank == top.rank + 3 {
+            let founded = target.cards()[0].rank == base;
+            if founded && top.suit == card.suit && card.rank == top.rank + 3 {
                 Ok(())
             } else {
                 Err(MoveError::Mismatch)
@@ -311,6 +355,34 @@ fn is_complete_mod3(pile: &Pile, base: u8) -> bool {
         && cards
             .windows(2)
             .all(|w| w[1].rank == w[0].rank + 3 && w[1].suit == w[0].suit)
+}
+
+/// Append a refill to `base`: a working-row pile it leaves empty takes the
+/// talon's top card, as KPatience does. The step is part of the same action,
+/// so one undo takes back the move and the refill together.
+fn with_refill(board: &Board, base: Action) -> Action {
+    let mut scratch = board.clone();
+    scratch.apply(&base);
+    let mut steps = base.steps;
+
+    for pile in TABLEAU..TABLEAU + ROWS {
+        if scratch.pile(pile).is_empty() && !scratch.pile(STOCK).is_empty() {
+            let step = Step {
+                from: STOCK,
+                to: pile,
+                count: 1,
+                reverse: false,
+                was_face_up: false,
+                face_up: true,
+                flip_source: false,
+                recycle: false,
+            };
+            scratch.apply(&Action::single(step));
+            steps.push(step);
+        }
+    }
+
+    Action::new(steps)
 }
 
 #[cfg(test)]
@@ -557,7 +629,7 @@ mod tests {
     }
 
     #[test]
-    fn an_emptied_working_row_pile_stays_empty_until_the_next_deal() {
+    fn an_emptied_working_row_pile_is_refilled_from_the_talon() {
         let board = make_board(
             [
                 &[c(2, Hearts)],
@@ -576,24 +648,132 @@ mod tests {
             &[],
         );
 
-        // A foundation move, an Ace home, and `f` all leave their gap open.
+        // A foundation move, an Ace home, and `f` all refill their gap.
         let moves = [
-            Mod3.action_for(&board, Move::new(0, 0, FOUND_2)),
-            Mod3.action_for(&board, Move::new(1, 0, ACES)),
-            Mod3.send_home(&board, 1).expect("the ace has a home"),
+            (TABLEAU, Mod3.action_for(&board, Move::new(0, 0, FOUND_2))),
+            (TABLEAU + 1, Mod3.action_for(&board, Move::new(1, 0, ACES))),
+            (
+                TABLEAU + 1,
+                Mod3.send_home(&board, 1).expect("the ace has a home"),
+            ),
         ];
-        for action in moves {
-            assert_eq!(action.steps.len(), 1, "just the move, no refill");
+        for (emptied, action) in moves {
+            assert_eq!(action.steps.len(), 2, "the move, then one refill");
             let mut after = board.clone();
             after.apply(&action);
-            assert_eq!(after.pile(STOCK).len(), board.pile(STOCK).len());
-            let gaps = (TABLEAU..TABLEAU + ROWS)
-                .filter(|&p| after.pile(p).is_empty())
-                .count();
-            assert_eq!(gaps, 1);
+            assert_eq!(after.pile(STOCK).len(), board.pile(STOCK).len() - 1);
+            assert_eq!(after.pile(emptied).exposed(), Some(c(3, Diamonds)));
+            assert!((TABLEAU..TABLEAU + ROWS).all(|p| !after.pile(p).is_empty()));
             after.undo(&action);
             assert_eq!(after, board);
         }
+    }
+
+    #[test]
+    fn once_the_talon_is_spent_an_emptied_pile_stays_open() {
+        let board = make_board(
+            [&[c(2, Hearts)], &[], &[], &[], &[], &[], &[], &[]],
+            empty8f(),
+            empty8f(),
+            empty8f(),
+            &[],
+            &[],
+        );
+        let action = Mod3.action_for(&board, Move::new(0, 0, FOUND_2));
+        assert_eq!(action.steps.len(), 1, "nothing left to refill with");
+    }
+
+    #[test]
+    fn a_misplaced_card_cannot_be_built_on() {
+        // 6♠ dealt into the 2-row, and 5♠ — right row, wrong spot — beside it.
+        let board = make_board(
+            [
+                &[c(9, Spades)],
+                &[c(8, Spades)],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            ],
+            [
+                &[c(6, Spades)],
+                &[c(5, Spades)],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            ],
+            empty8f(),
+            empty8f(),
+            &[],
+            &[],
+        );
+        assert_eq!(
+            Mod3.check(&board, Move::new(0, 0, FOUND_2)),
+            Err(MoveError::Mismatch)
+        );
+        assert_eq!(
+            Mod3.check(&board, Move::new(1, 0, FOUND_2 + 1)),
+            Err(MoveError::Mismatch)
+        );
+    }
+
+    #[test]
+    fn a_misplaced_card_is_hinted_out_of_its_row() {
+        // 5♠ dealt into a bare 2-row spot; 2♠ is founded beside it.
+        let board = make_board(
+            [&[c(9, Hearts)], &[], &[], &[], &[], &[], &[], &[]],
+            [
+                &[c(5, Spades)],
+                &[c(2, Spades)],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            ],
+            empty8f(),
+            empty8f(),
+            &[],
+            &[],
+        );
+        let hints = Mod3.suggestions(&board);
+        assert_eq!(hints.first(), Some(&Move::new(FOUND_2, 0, FOUND_2 + 1)));
+        // Parking it in the working row is offered too, just ranked lower.
+        assert!(hints.contains(&Move::new(FOUND_2, 0, TABLEAU + 1)));
+        // The founded 2♠ is home, and `f` leaves it there.
+        assert!(hints.iter().all(|mv| mv.from != FOUND_2 + 1));
+        assert!(Mod3.send_home(&board, FOUND_2 + 1).is_none());
+        assert!(Mod3.send_home(&board, FOUND_2).is_some());
+    }
+
+    #[test]
+    fn a_lone_working_card_is_not_hinted_into_an_empty_pile() {
+        let board = make_board(
+            [
+                &[c(9, Hearts)],
+                &[c(7, Clubs), c(10, Hearts)],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            ],
+            empty8f(),
+            empty8f(),
+            empty8f(),
+            &[],
+            &[],
+        );
+        let hints = Mod3.suggestions(&board);
+        assert!(hints.iter().all(|mv| mv.from != TABLEAU), "{hints:?}");
+        assert!(hints.contains(&Move::new(TABLEAU + 1, 1, TABLEAU + 2)));
     }
 
     #[test]

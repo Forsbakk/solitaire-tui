@@ -260,20 +260,28 @@ the same board at all three difficulties.
 ### Mod3
 
 Two decks, 32 piles in a 4×8 grid — three rows of foundations above a working
-row — and a talon.
+row — and a talon. The rules follow KDE's KPatience.
 
 * The three **foundation rows** each build in suit in steps of three:
   * **Row 1** — 2 → 5 → 8 → J, same suit per pile
   * **Row 2** — 3 → 6 → 9 → Q, same suit per pile
   * **Row 3** — 4 → 7 → 10 → K, same suit per pile
+* An empty foundation spot takes only its row's base card (2, 3 or 4). A
+  card dealt into the wrong spot is **misplaced**: nothing can be built on it,
+  and it is there to be moved off — to its own row, or into the working row.
+  `H` suggests those moves first.
 * Each foundation pile fans downwards and its row grows with its tallest stack, so a whole stack can be read at a glance.
-  The board is tall — about 31 rows at least.
+  As in KPatience, the Aces sit beside the first row and the talon beside the
+  working row; the board needs a 62×29 terminal.
 * **Aces** go to a separate pile and sit there for good. All eight must be
   placed to win.
 * The **working row** only accepts a card onto an **empty pile**. A pile that
-  empties stays open as a free cell until the next deal.
+  empties is refilled from the talon straight away; once the talon is spent,
+  it stays open as a free cell.
 * Press `d` to deal one card from the talon onto **all eight** working-row
   piles at once, even non-empty ones.
+* The digits `1`…`8` name columns: holding a card, a digit drops it on
+  whichever pile of that column takes it.
 * `f` sends a card to its foundation or, failing that, onto the first empty
   working-row pile. Once only foundation moves remain, `A` plays out the rest.
 * Win by completing all 24 foundation sequences and placing all 8 Aces.
@@ -284,7 +292,7 @@ row — and a talon.
 | --- | --- |
 | `← →` `h l` | move between piles |
 | `↑ ↓` `k j` | move up and down a pile, and between rows |
-| `1`…`9` `0` | jump to a tableau pile, or drop a held card there — `0` is the tenth, on Spider's board |
+| `1`…`9` `0` | jump to a tableau column, or drop a held card there — `0` is the tenth, on Spider's board |
 | `space` `enter` | pick up the card under the cursor, or drop what you hold |
 | `esc` | put a held card back |
 | `d` | turn or deal the stock (Klondike, Scorpion, Spiderette, Spider) |

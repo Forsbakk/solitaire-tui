@@ -195,29 +195,32 @@ pub fn draw_board(
     }
 }
 
-/// Numbered labels directly above the tableau, with the cursor's pile called
-/// out. These double as the digit shortcuts, so the player can see where those
-/// jump to — which only works if they sit over the piles they number, not over
-/// whichever row happens to be at the top of the board.
-pub fn draw_labels(buffer: &mut Buffer, layout: &BoardLayout, tableau: &[PileId], active: PileId) {
-    // The row above the tableau: the board's own margin when the tableau is the
-    // top row, and the gap between rows otherwise.
-    let Some(y) = tableau
-        .first()
-        .and_then(|&pile| layout.pile(pile))
-        .and_then(|pile| pile.top.checked_sub(1))
-    else {
-        return;
-    };
-
-    for (index, &pile) in tableau.iter().enumerate() {
-        let Some(pile_layout) = layout.pile(pile) else {
+/// Numbered labels directly above the tableau's columns, with the cursor's
+/// column called out. These double as the digit shortcuts, so the player can
+/// see where those jump to — which only works if they sit over the columns
+/// they number, not over whichever row happens to be at the top of the board.
+///
+/// Each column is labelled once, over its top fanned pile, however many fanned
+/// rows it runs through.
+pub fn draw_labels(
+    buffer: &mut Buffer,
+    layout: &BoardLayout,
+    columns: &[Vec<PileId>],
+    active: PileId,
+) {
+    for (index, column) in columns.iter().enumerate() {
+        // The row above the column: the board's own margin when the tableau is
+        // the top row, and the gap between rows otherwise.
+        let Some(pile_layout) = column.first().and_then(|&pile| layout.pile(pile)) else {
             continue;
         };
-        // The tenth pile is labelled `0`, because `0` is the key that jumps to
-        // it. Boards with fewer than ten fanned piles are unaffected.
+        let Some(y) = pile_layout.top.checked_sub(1) else {
+            continue;
+        };
+        // The tenth column is labelled `0`, because `0` is the key that jumps
+        // to it. Boards with fewer than ten columns are unaffected.
         let number = (index + 1) % 10;
-        let (label, style) = if pile == active {
+        let (label, style) = if column.contains(&active) {
             (
                 format!("[{number}]"),
                 Style::new().fg(CURSOR).add_modifier(Modifier::BOLD),
