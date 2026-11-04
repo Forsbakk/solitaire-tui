@@ -85,9 +85,8 @@ the box-drawing and suit characters the board is made of.
 ### In the browser
 
 The same game runs in a browser tab, compiled to WebAssembly and drawn with
-[Ratzilla](https://github.com/ratatui/ratzilla):
-<https://forsbakk.github.io/solitaire-tui/>. It is a separate build from the
-terminal game, and installing the terminal game pulls in none of it.
+[Ratzilla](https://github.com/ratatui/ratzilla).
+**[Play it in your browser](https://forsbakk.github.io/solitaire-tui/)**
 
 The query string does what the command-line flags do, so a deal can be shared as
 a link: `?game=klondike&rule=draw=1&seed=42`. In a tab, `q` returns to the menu,
