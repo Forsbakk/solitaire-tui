@@ -86,6 +86,7 @@ the box-drawing and suit characters the board is made of.
 
 The same game runs in a browser tab, compiled to WebAssembly and drawn with
 [Ratzilla](https://github.com/ratatui/ratzilla).
+
 **[Play it in your browser](https://forsbakk.github.io/solitaire-tui/)**
 
 The query string does what the command-line flags do, so a deal can be shared as
