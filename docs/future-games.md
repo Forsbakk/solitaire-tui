@@ -1,7 +1,7 @@
 # Future games
 
 The crate plays Klondike, FreeCell, Scorpion, Yukon, Russian Solitaire, Spiderette,
-Spider and Mod3, and a variant is now one file in `src/rules/` plus a line in `rules::games()`. So the question is
+Spider and Mod3, and a variant is now one file in `crates/solitaire-tui-core/src/rules/` plus a line in `rules::games()`. So the question is
 no longer "what would it take to support a second game" but simply which games are worth
 adding and what each still needs from the shared code. This file is a candidate list, not a
 commitment. Entries are grouped by cost.
@@ -10,31 +10,31 @@ commitment. Entries are grouped by cost.
 
 | Piece | Where | Reusable as-is? |
 | --- | --- | --- |
-| `Card`, `Suit`, `ACE`/`KING`, `face()` | `src/card.rs` | Yes |
-| `shuffled_deck(seed)` / `shuffled_decks(seed, decks)` — splitmix64, Fisher–Yates | `src/card.rs` | Yes — one deck or many |
-| `Pile` — a kind, a face-down prefix, a face-up suffix | `src/board.rs` | Yes, for every pile kind |
-| `Board` — a flat `Vec<Pile>` addressed by `PileId` | `src/board.rs` | Yes |
-| `Move` = `(from, index, to)` over piles of any kind | `src/board.rs` | Yes |
-| `Action`/`Step` and the undo/redo stacks | `src/board.rs`, `src/app.rs` | Yes — the step flags cover flips, reversal and recycles |
-| `Rules` trait, with most methods defaulted | `src/rules/mod.rs` | Yes; a simple variant overrides seven methods |
-| `BoardSpec` — rows of slots, fanned or flat | `src/board.rs`, `src/ui/layout.rs` | Yes for row-and-slot boards |
-| Layout as the single source of truth for board shape | `src/ui/layout.rs` `compute()` and `hit()` | Yes, including multi-row boards |
-| Cursor, selection, hint cycling, mouse, menu | `src/app.rs`, `src/ui/menu.rs` | Yes — pile counts and key mappings come from the spec |
-| Hint ranking — default `suggestions()` + per-game `rank()` | `src/rules/mod.rs` | Yes; each game supplies only its heuristic |
-| One-key play of a forced move — default `only_move()` behind `f` | `src/rules/mod.rs`, `src/app.rs` | Yes, from `check` alone; a game with no foundations still gets the key |
-| Density fallback — Roomy, Tight, elided `⋯N` | `src/ui/layout.rs` | Yes, and every long-pile game wants it |
-| Foundations, stock, waste, draw/recycle, send-home, autoplay | `src/rules/klondike.rs` | As worked examples, not as shared code |
-| Per-game rule options in the menu and on the CLI | `src/rules/mod.rs`, `src/ui/menu.rs` | Yes — declare `OptionSpec`s and read `selected()` |
-| A free-tail lift onto foundations, with no stock at all | `src/rules/yukon.rs` | Yes — `pub(super)` functions, already shared with `russian.rs` |
-| `PileKind::FreeCell` — a pile holding exactly one card | `src/board.rs`, `src/rules/freecell.rs` | Yes, and as the pattern for any new pile kind |
-| A move-size limit the app cannot know about, enforced in `check` | `src/rules/freecell.rs` `capacity` | Yes — selection is never capped by `app.rs` |
-| A board with nothing face down, and an `autoplay` gate to match | `src/rules/freecell.rs` `is_decided` | Yes, and required: `face_down_count` says nothing there |
-| Two games differing by one predicate, in two files | `src/rules/yukon.rs`, `src/rules/russian.rs` | Yes, as the pattern to copy; `Build` is shared by three games now |
-| Two games differing by three parameters, via one `Setup` struct | `src/rules/spider.rs`, `src/rules/spiderette.rs` | Yes, as the pattern to copy when it is more than a predicate |
-| Cards leaving play — steps appended to the move's own `Action` | `src/rules/spider.rs` `with_filing` | Yes, as the pattern to copy |
-| A stock that deals onto every column at once, repeatedly | `src/rules/spider.rs` | Yes |
-| Foundations whose base rank is not Ace (2, 3, or 4) and that build in steps larger than one | `src/rules/mod3.rs` `foundation_check` | Yes, as a worked example |
-| A board ten columns wide, with `0` as the tenth shortcut | `src/rules/spider.rs`, `src/app.rs` | Yes — `board_width` sizes it at 69 cells |
+| `Card`, `Suit`, `ACE`/`KING`, `face()` | `crates/solitaire-tui-core/src/card.rs` | Yes |
+| `shuffled_deck(seed)` / `shuffled_decks(seed, decks)` — splitmix64, Fisher–Yates | `crates/solitaire-tui-core/src/card.rs` | Yes — one deck or many |
+| `Pile` — a kind, a face-down prefix, a face-up suffix | `crates/solitaire-tui-core/src/board.rs` | Yes, for every pile kind |
+| `Board` — a flat `Vec<Pile>` addressed by `PileId` | `crates/solitaire-tui-core/src/board.rs` | Yes |
+| `Move` = `(from, index, to)` over piles of any kind | `crates/solitaire-tui-core/src/board.rs` | Yes |
+| `Action`/`Step` and the undo/redo stacks | `crates/solitaire-tui-core/src/board.rs`, `crates/solitaire-tui-core/src/app.rs` | Yes — the step flags cover flips, reversal and recycles |
+| `Rules` trait, with most methods defaulted | `crates/solitaire-tui-core/src/rules/mod.rs` | Yes; a simple variant overrides seven methods |
+| `BoardSpec` — rows of slots, fanned or flat | `crates/solitaire-tui-core/src/board.rs`, `crates/solitaire-tui-core/src/ui/layout.rs` | Yes for row-and-slot boards |
+| Layout as the single source of truth for board shape | `crates/solitaire-tui-core/src/ui/layout.rs` `compute()` and `hit()` | Yes, including multi-row boards |
+| Cursor, selection, hint cycling, mouse, menu | `crates/solitaire-tui-core/src/app.rs`, `crates/solitaire-tui-core/src/ui/menu.rs` | Yes — pile counts and key mappings come from the spec |
+| Hint ranking — default `suggestions()` + per-game `rank()` | `crates/solitaire-tui-core/src/rules/mod.rs` | Yes; each game supplies only its heuristic |
+| One-key play of a forced move — default `only_move()` behind `f` | `crates/solitaire-tui-core/src/rules/mod.rs`, `crates/solitaire-tui-core/src/app.rs` | Yes, from `check` alone; a game with no foundations still gets the key |
+| Density fallback — Roomy, Tight, elided `⋯N` | `crates/solitaire-tui-core/src/ui/layout.rs` | Yes, and every long-pile game wants it |
+| Foundations, stock, waste, draw/recycle, send-home, autoplay | `crates/solitaire-tui-core/src/rules/klondike.rs` | As worked examples, not as shared code |
+| Per-game rule options in the menu and on the CLI | `crates/solitaire-tui-core/src/rules/mod.rs`, `crates/solitaire-tui-core/src/ui/menu.rs` | Yes — declare `OptionSpec`s and read `selected()` |
+| A free-tail lift onto foundations, with no stock at all | `crates/solitaire-tui-core/src/rules/yukon.rs` | Yes — `pub(super)` functions, already shared with `russian.rs` |
+| `PileKind::FreeCell` — a pile holding exactly one card | `crates/solitaire-tui-core/src/board.rs`, `crates/solitaire-tui-core/src/rules/freecell.rs` | Yes, and as the pattern for any new pile kind |
+| A move-size limit the app cannot know about, enforced in `check` | `crates/solitaire-tui-core/src/rules/freecell.rs` `capacity` | Yes — selection is never capped by `app.rs` |
+| A board with nothing face down, and an `autoplay` gate to match | `crates/solitaire-tui-core/src/rules/freecell.rs` `is_decided` | Yes, and required: `face_down_count` says nothing there |
+| Two games differing by one predicate, in two files | `crates/solitaire-tui-core/src/rules/yukon.rs`, `crates/solitaire-tui-core/src/rules/russian.rs` | Yes, as the pattern to copy; `Build` is shared by three games now |
+| Two games differing by three parameters, via one `Setup` struct | `crates/solitaire-tui-core/src/rules/spider.rs`, `crates/solitaire-tui-core/src/rules/spiderette.rs` | Yes, as the pattern to copy when it is more than a predicate |
+| Cards leaving play — steps appended to the move's own `Action` | `crates/solitaire-tui-core/src/rules/spider.rs` `with_filing` | Yes, as the pattern to copy |
+| A stock that deals onto every column at once, repeatedly | `crates/solitaire-tui-core/src/rules/spider.rs` | Yes |
+| Foundations whose base rank is not Ace (2, 3, or 4) and that build in steps larger than one | `crates/solitaire-tui-core/src/rules/mod3.rs` `foundation_check` | Yes, as a worked example |
+| A board ten columns wide, with `0` as the tenth shortcut | `crates/solitaire-tui-core/src/rules/spider.rs`, `crates/solitaire-tui-core/src/app.rs` | Yes — `board_width` sizes it at 69 cells |
 
 What still does not exist: `PileKind::Reserve` (deliberately not added until a game needs
 it), non-row board geometry, and scoring.
@@ -90,7 +90,7 @@ four.
 
 ### FreeCell — shipped
 
-`src/rules/freecell.rs`. It cost what this file predicted: `PileKind::FreeCell`, four
+`crates/solitaire-tui-core/src/rules/freecell.rs`. It cost what this file predicted: `PileKind::FreeCell`, four
 `Fan::None` slots beside the foundations, and the `(free cells + 1) × (empty columns + 1)`
 limit in `check`. Three things were worth more than they looked:
 
@@ -111,7 +111,7 @@ limit in `check`. Three things were worth more than they looked:
 
 ### Mod3 — shipped
 
-`src/rules/mod3.rs`. Two decks, a 4×8 grid, foundations building in steps of
+`crates/solitaire-tui-core/src/rules/mod3.rs`. Two decks, a 4×8 grid, foundations building in steps of
 three. Two things were worth more than they looked:
 
 - **Check KPatience's source, not a description of it.** Release 0.4.2

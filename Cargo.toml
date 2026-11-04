@@ -1,22 +1,23 @@
-[package]
-name = "solitaire-tui"
-version = "0.4.3"
+[workspace]
+resolver = "3"
+members = ["crates/solitaire-tui-core", "crates/solitaire-tui", "crates/solitaire-web"]
+# A bare `cargo build`/`cargo test` is the terminal game and its engine. The web
+# frontend is opt-in (`-p solitaire-web` or Trunk), so nobody installing the TUI
+# compiles a line of it.
+default-members = ["crates/solitaire-tui-core", "crates/solitaire-tui"]
+
+[workspace.package]
+version = "0.4.4"
 edition = "2024"
 rust-version = "1.88"
 authors = ["Jonas Forsbakk <jonas@forsbakk.priv.no>"]
-description = "Eight solitaire games in the terminal — Klondike, FreeCell, Scorpion, Yukon, Russian, Spiderette, Spider and Mod3"
 repository = "https://github.com/Forsbakk/solitaire-tui"
 homepage = "https://github.com/Forsbakk/solitaire-tui"
 license = "MIT OR Apache-2.0"
-readme = "README.md"
-keywords = ["solitaire", "tui", "game", "cards", "ratatui"]
-categories = ["games", "command-line-utilities"]
-exclude = ["CLAUDE.md", ".github/", "packaging/"]
 
-[dependencies]
-anyhow = "1.0.104"
-clap = { version = "4.6.5", features = ["derive"] }
-ratatui = "0.30.2"
+[workspace.dependencies]
+solitaire-tui-core = { path = "crates/solitaire-tui-core", version = "0.4.4" }
+ratatui = { version = "0.30.2", default-features = false }
 
 [profile.release]
 lto = true

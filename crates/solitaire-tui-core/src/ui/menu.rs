@@ -4,17 +4,13 @@
 //! rules along with the ones the player may change before dealing. `tab` moves
 //! between the panes, so the arrow keys mean one thing at a time.
 
-use anyhow::Result;
-use ratatui::crossterm::event::{
-    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
-    MouseEventKind,
-};
+use ratatui::Frame;
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget, Wrap};
-use ratatui::{DefaultTerminal, Frame};
 
+use crate::input::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use crate::rules::{self, Rules};
 use crate::ui::render::{centered, wrapped_height};
 
@@ -70,23 +66,11 @@ impl Menu {
         }
     }
 
-    /// Run the menu until a game is chosen or the player quits.
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<Option<Box<dyn Rules>>> {
-        loop {
-            terminal.draw(|frame| self.draw(frame))?;
-            match self.handle(event::read()?) {
-                Some(Choice::Play) => return Ok(Some(self.take())),
-                Some(Choice::Quit) => return Ok(None),
-                None => {}
-            }
-        }
-    }
-
     /// A fresh copy of the highlighted game, carrying the rules chosen here.
     ///
     /// The menu keeps its own games so the settings survive coming back to it,
     /// which is why this rebuilds rather than handing its copy over.
-    fn take(&self) -> Box<dyn Rules> {
+    pub fn take(&self) -> Box<dyn Rules> {
         let source = &self.games[self.selected];
         let mut game = rules::find(source.name()).expect("the menu only lists real games");
         for (index, &value) in source.selected().iter().enumerate() {
@@ -108,14 +92,13 @@ impl Menu {
 
     pub fn handle(&mut self, event: Event) -> Option<Choice> {
         match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key(key),
+            Event::Key(key) => self.on_key(key),
             Event::Mouse(mouse) => self.on_mouse(mouse),
-            _ => None,
         }
     }
 
     fn on_key(&mut self, key: KeyEvent) -> Option<Choice> {
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        if key.ctrl && key.code == KeyCode::Char('c') {
             return Some(Choice::Quit);
         }
         match key.code {
@@ -408,7 +391,6 @@ mod tests {
     use super::*;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    use ratatui::crossterm::event::KeyEventState;
 
     fn screen(menu: &mut Menu, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -427,12 +409,7 @@ mod tests {
     }
 
     fn press(menu: &mut Menu, code: KeyCode) -> Option<Choice> {
-        menu.handle(Event::Key(KeyEvent {
-            code,
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }))
+        menu.handle(code.into())
     }
 
     fn click(menu: &mut Menu, x: u16, y: u16) -> Option<Choice> {
@@ -440,7 +417,6 @@ mod tests {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: x,
             row: y,
-            modifiers: KeyModifiers::NONE,
         }))
     }
 

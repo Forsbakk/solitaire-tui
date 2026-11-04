@@ -1,18 +1,18 @@
 # Adding a game
 
-A solitaire variant is one file in `src/rules/` plus a line in `rules::games()`.
+A solitaire variant is one file in `crates/solitaire-tui-core/src/rules/` plus a line in `rules::games()`.
 Everything else — the board, undo, the cursor, the mouse, the layout, the menu,
 hints, the help popup — is shared and needs no changes.
 
 This guide walks through building **Yukon** from nothing, then documents each
 piece of the contract in more detail. For complete examples in the tree,
-`src/rules/scorpion.rs` is the smallest game and `src/rules/klondike.rs` uses
+`crates/solitaire-tui-core/src/rules/scorpion.rs` is the smallest game and `crates/solitaire-tui-core/src/rules/klondike.rs` uses
 nearly every hook there is.
 
-Yukon has since shipped, so [`src/rules/yukon.rs`](../src/rules/yukon.rs) is this
+Yukon has since shipped, so [`crates/solitaire-tui-core/src/rules/yukon.rs`](../src/rules/yukon.rs) is this
 walkthrough as it actually landed — worth reading alongside. It differs in two
 ways, both noted where they come up: its shared half is factored out as
-`pub(super)` functions so [`src/rules/russian.rs`](../src/rules/russian.rs) can
+`pub(super)` functions so [`crates/solitaire-tui-core/src/rules/russian.rs`](../src/rules/russian.rs) can
 be Russian Solitaire in forty lines, and its `is_useful` is a little more careful
 than the version below.
 
@@ -323,7 +323,7 @@ fn status(&self, board: &Board) -> Vec<StatusItem> {
 
 Seed and move count are shown for every game; `status` is only for the extras.
 
-Then two lines in `src/rules/mod.rs`:
+Then two lines in `crates/solitaire-tui-core/src/rules/mod.rs`:
 
 ```rust
 pub mod yukon;
@@ -345,7 +345,7 @@ help, and the generic tests in `rules/mod.rs` start covering it immediately.
 
 ## The `Rules` trait, method by method
 
-Defined in `src/rules/mod.rs`.
+Defined in `crates/solitaire-tui-core/src/rules/mod.rs`.
 
 ### Required
 
@@ -386,7 +386,7 @@ Two overrides are easy to forget:
 
 ## The board API
 
-From `src/board.rs`. None of it knows any rules.
+From `crates/solitaire-tui-core/src/board.rs`. None of it knows any rules.
 
 ### `Pile`
 
@@ -604,7 +604,7 @@ ways to ship one, and they are not equivalent:
 
 For the second, put the shared half in the first game's module as `pub(super)`
 functions and let the new file supply only what differs.
-`src/rules/russian.rs` is the whole pattern: a `//!` header, a struct, its own
+`crates/solitaire-tui-core/src/rules/russian.rs` is the whole pattern: a `//!` header, a struct, its own
 `name`/`blurb`, and a `Rules` impl whose methods forward to `yukon::…` — with
 `check` passing `Build::SameSuit` where Yukon passes `Build::AlternatingColour`.
 
@@ -612,7 +612,7 @@ Keep the divergence to one named type. An `enum` with a method that both games
 call, rather than a `bool` threaded through several functions, is what stops the
 second game slowly acquiring a second copy of the first one's rules.
 
-`src/rules/spiderette.rs` is the second instance, and shows the shape scales
+`crates/solitaire-tui-core/src/rules/spiderette.rs` is the second instance, and shows the shape scales
 past a single predicate: Spiderette differs from Spider in deck count, column
 count and suit count, and all three live in one `Copy` `Setup` struct passed as
 one first argument. The test that the split is honest is that `spider::check`
@@ -624,7 +624,7 @@ the deals really are identical — and lean on the first game's suite for the re
 
 When a *third* game wants the same divergence, move it up rather than reaching
 sideways for it: `Build` started in `yukon.rs` as `pub(super)` for `russian.rs`,
-and moved to `src/rules/mod.rs` when `freecell.rs` wanted it too. A shared
+and moved to `crates/solitaire-tui-core/src/rules/mod.rs` when `freecell.rs` wanted it too. A shared
 predicate belongs to the trait's module; a shared *deal* still belongs to the
 game it came from.
 
@@ -653,7 +653,7 @@ permanent.
 ## Testing a new game
 
 Registering the game immediately subjects it to the generic tests in
-`src/rules/mod.rs`, which check every registered game:
+`crates/solitaire-tui-core/src/rules/mod.rs`, which check every registered game:
 
 - names are unique and findable
 - `deal` is seed-stable, and different seeds differ
@@ -729,7 +729,7 @@ file. Run one with `cargo test only_a_king`, and print a board mid-test with
 
 ## Checklist
 
-- [ ] `src/rules/<game>.rs` with a `//!` header listing the rules
+- [ ] `crates/solitaire-tui-core/src/rules/<game>.rs` with a `//!` header listing the rules
 - [ ] Pile ids as constants, tableau first
 - [ ] `deal` pure in `seed`, piles built in id order
 - [ ] `spec` covering every pile you want drawn
@@ -741,7 +741,7 @@ file. Run one with `cargo test only_a_king`, and print a board mid-test with
       column half comes free from `check` — nothing to write)
 - [ ] `help` listing only the keys this game adds
 - [ ] `status` for any counter worth showing
-- [ ] `pub mod` + registry line in `src/rules/mod.rs`
+- [ ] `pub mod` + registry line in `crates/solitaire-tui-core/src/rules/mod.rs`
 - [ ] Tests: deal shape, pinned seed, one per rule, undo round-trip
 - [ ] `cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`
 - [ ] README's game list and key table updated

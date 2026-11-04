@@ -58,6 +58,8 @@ jobs:
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: solitaire-tui
+          # A workspace: build the terminal game, never the browser one.
+          manifest-path: crates/solitaire-tui/Cargo.toml
           target: ${{ matrix.target }}
           # .tar.gz everywhere, .zip on Windows — the action's default.
           archive: $bin-$tag-$target

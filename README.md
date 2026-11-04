@@ -82,6 +82,17 @@ Any terminal with 256 colours and a font covering `♠ ♥ ♦ ♣` will do. On 
 use Windows Terminal rather than the legacy console host, which cannot render
 the box-drawing and suit characters the board is made of.
 
+### In the browser
+
+The same game runs in a browser tab, compiled to WebAssembly and drawn with
+[Ratzilla](https://github.com/ratatui/ratzilla):
+<https://forsbakk.github.io/solitaire-tui/>. It is a separate build from the
+terminal game, and installing the terminal game pulls in none of it.
+
+The query string does what the command-line flags do, so a deal can be shared as
+a link: `?game=klondike&rule=draw=1&seed=42`. In a tab, `q` returns to the menu,
+since there is nothing to quit to, and `ctrl-c` is left to the browser as copy.
+
 ## Playing
 
 ```sh
@@ -375,34 +386,52 @@ small" note naming that size.
 
 ## Adding a game
 
-A variant is one file in `src/rules/` plus a line in `rules::games()`. It
+A variant is one file in `crates/solitaire-tui-core/src/rules/` plus a line in `rules::games()`. It
 implements `Rules`: how to deal, where its piles sit, what a legal move is, and
 when the game is won. Most of the trait is defaulted — the default `suggestions`
 walks every legal move and ranks it with the game's own `rank`.
 
-Everything else is shared. `src/board.rs` holds the piles and the undoable
-actions, `src/ui/layout.rs` places any board the spec describes, and `src/app.rs`
+Everything else is shared. `crates/solitaire-tui-core/src/board.rs` holds the piles and the undoable
+actions, `crates/solitaire-tui-core/src/ui/layout.rs` places any board the spec describes, and `crates/solitaire-tui-core/src/app.rs`
 drives the cursor, selection and undo for whatever game it is handed.
 
 [`docs/adding-a-game.md`](docs/adding-a-game.md) is the full guide — a
 walkthrough building Yukon from nothing, the trait method by method, and what to
-test; `src/rules/yukon.rs` is that walkthrough as it actually shipped. Variants
+test; `crates/solitaire-tui-core/src/rules/yukon.rs` is that walkthrough as it actually shipped. Variants
 that could come next, and what each would cost, are sketched in
 [`docs/future-games.md`](docs/future-games.md).
 
 ## Development
 
+The repository is a Cargo workspace of three packages:
+
+```
+crates/solitaire-tui-core   the engine: cards, rules, layout, drawing — no terminal
+crates/solitaire-tui        the terminal game (crossterm), published to crates.io
+crates/solitaire-web        the browser game (Ratzilla), never published
+```
+
+A bare `cargo` command at the root builds and tests the first two only.
+
 ```sh
 cargo test
 cargo clippy --all-targets -- -D warnings
-cargo fmt --check
+cargo fmt --all --check
 ```
 
-The rules live in `src/rules/` and are fully testable without a terminal; each
+The browser build needs the wasm target and [Trunk](https://trunkrs.dev):
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install trunk --locked
+cd crates/solitaire-web && trunk serve   # http://127.0.0.1:8080/?game=scorpion&seed=42
+```
+
+The rules live in `crates/solitaire-tui-core/src/rules/` and are fully testable without a terminal; each
 game's suite includes an undo round-trip that plays a few hundred legal moves and
 asserts the board returns to the exact opening deal.
 
-`src/ui/layout.rs` decides where every card sits and is the single source of
+`crates/solitaire-tui-core/src/ui/layout.rs` decides where every card sits and is the single source of
 truth for the board's shape — the renderer draws from it and mouse clicks are
 resolved against it, so a click can never disagree with what is on screen.
 

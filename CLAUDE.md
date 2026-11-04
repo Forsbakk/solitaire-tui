@@ -11,18 +11,24 @@ cargo run --release -- --game klondike --rule draw=1  # set a game's rules
 cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck board
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 273 tests
+cargo test                          # all 279 tests (276 core, 3 tui adapter; web has none)
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
 cargo clippy --all-targets -- -D warnings
-cargo fmt --check
+cargo fmt --all --check
+
+# the browser build — needs `rustup target add wasm32-unknown-unknown` and trunk
+cargo clippy -p solitaire-web --target wasm32-unknown-unknown -- -D warnings
+cd crates/solitaire-web && trunk serve    # http://127.0.0.1:8080/?game=scorpion&seed=42
 ```
 
-The directory, crate and binary are all `solitaire-tui` (`solitaire` was taken on
-crates.io, and `/usr/bin/solitaire` collides with GNOME's patience game on Arch).
-There is no integration test directory — every test is a `#[cfg(test)] mod tests`
-inside the module it covers.
+The directory, the terminal crate and its binary are all `solitaire-tui`
+(`solitaire` was taken on crates.io, and `/usr/bin/solitaire` collides with GNOME's
+patience game on Arch). The engine is `solitaire-tui-core` because `solitaire-core`
+was taken too. There is no integration test directory — every test is a
+`#[cfg(test)] mod tests` inside the module it covers — all but the crossterm
+adapter's live in the core crate.
 
 ## Releasing
 
@@ -30,6 +36,15 @@ inside the module it covers.
 clippy, rustfmt and a `cargo check` against the declared MSRV. Bump
 `rust-version` only alongside the dependency that forced it — the msrv job is
 what keeps that field honest.
+
+Publishing to crates.io is two steps, core first, since `solitaire-tui` depends on
+it by version: `cargo publish -p solitaire-tui-core && cargo publish -p solitaire-tui`.
+Both take their version from `[workspace.package]`; bump the
+`solitaire-tui-core` version in `[workspace.dependencies]` alongside it.
+
+`.github/workflows/pages.yml` builds `crates/solitaire-web` with Trunk and deploys
+it to GitHub Pages on every push to `main`. The `wasm` job in `ci.yml` is what
+stops the engine picking up anything that cannot run in a browser.
 
 Pushing a `v*` tag builds five targets and uploads them to a GitHub release:
 
@@ -44,20 +59,50 @@ and SmartScreen.
 
 ## Architecture
 
+A workspace of three packages. Paths below are inside `crates/solitaire-tui-core/src`
+unless they say otherwise.
+
 ```
-main.rs      CLI, terminal, and the menu ⇄ game loop
+solitaire-tui/src/main.rs  terminal frontend: CLI, crossterm, crossterm → input::Event
+solitaire-web/src/main.rs  browser frontend: Ratzilla, DOM events → input::Event, ?query
+shell.rs     Shell: the menu ⇄ game state machine both frontends drive
+input.rs     Event/KeyEvent/MouseEvent — what the player did, from anywhere
 card.rs      Card, Suit, shuffled_deck/shuffled_decks — no game knowledge
 board.rs     Pile, Board, Move, Action/Step, BoardSpec — state, no rules
-rules/       one file per game + the Rules trait and registry
+rules/       one file per game + the Rules trait, registry and `configure`
 ui/layout.rs where cards sit; purely geometric
 ui/render.rs drawing; reads a layout and a Board
 ui/menu.rs   the game selector
 app.rs       Session: cursor, selection, undo stacks, input
 ```
 
-Dependencies point one way: `app` → {`rules`, `ui`} → `board` → `card`. `rules`
-never imports `ui`, which is why `BoardSpec` lives in `board.rs` even though only
-the layout consumes it.
+Dependencies point one way: frontend → `shell` → `app` → {`rules`, `ui`} →
+`board` → `card`. `rules` never imports `ui`, which is why `BoardSpec` lives in
+`board.rs` even though only the layout consumes it.
+
+### The engine has no terminal
+
+`solitaire-tui-core` depends on ratatui with `default-features = false` — no
+crossterm, no clock. That is what lets it compile to `wasm32-unknown-unknown`, and
+the CI `wasm` job keeps it so. Concretely:
+
+- Input is `input::Event`, never a backend's event type. Each frontend translates
+  and drops what is not a press (key releases, mouse moves), so `Session::handle`
+  and `Menu::handle` never ask what kind of event they got. Tests build
+  `input::Event`s directly — `KeyCode::Char('d').into()`.
+- Nothing blocks. `Shell` is fed one event at a time and asked to draw; the
+  terminal wraps it in a loop, the browser in callbacks. Don't add a `run` loop
+  to `Menu` or `Session` again.
+- Nothing reads the clock. Fresh seeds come from a `fn() -> u64` the frontend
+  passes to `Shell::new` (`SystemTime` in the terminal, `Math.random` in the
+  browser); `std::time::SystemTime::now` panics on wasm.
+- In the browser `Shell::without_quit` turns quitting into "back to the menu".
+
+The web frontend listens on the document itself rather than through Ratzilla's
+`on_key_event`/`on_mouse_event`: those attach to the DOM backend's grid element,
+which it rebuilds on every resize, and they cannot `preventDefault`. A click's
+cell is read from the DOM — the span's index in its `<pre>` is the column, the
+`<pre>`'s index in the grid is the row — so it is exact whatever the font or zoom.
 
 ### Adding a game is one file plus a registry line
 

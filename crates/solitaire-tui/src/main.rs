@@ -1,22 +1,22 @@
 //! Solitaire for the terminal.
 
-mod app;
-mod board;
-mod card;
-mod rules;
-mod ui;
-
 use std::io::stdout;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::event;
-use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode as CKeyCode,
+    KeyEventKind, KeyModifiers, MouseButton as CButton, MouseEventKind as CMouseKind,
+};
 use ratatui::crossterm::execute;
 
-use app::{Exit, Session};
-use rules::Rules;
+use solitaire_tui_core::input::{
+    Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind,
+};
+use solitaire_tui_core::rules;
+use solitaire_tui_core::shell::{Flow, Shell};
 
 #[derive(Parser)]
 #[command(
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     // mistyped name is an ordinary error rather than a flash of alternate
     // screen.
     let chosen = match &cli.game {
-        Some(name) => Some(configure(name, &cli.rules)?),
+        Some(name) => Some(rules::configure(name, &cli.rules).map_err(|error| anyhow!(error))?),
         None if !cli.rules.is_empty() => {
             return Err(anyhow!("--rule needs a --game to apply to"));
         }
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
         execute!(stdout(), EnableMouseCapture)?;
     }
 
-    let result = run(&mut terminal, chosen, cli.seed);
+    let result = run(&mut terminal, Shell::new(chosen, cli.seed, clock_seed));
 
     if mouse {
         let _ = execute!(stdout(), DisableMouseCapture);
@@ -96,53 +96,65 @@ fn list_games() {
     }
 }
 
-/// Look up `name` and apply every `key=value` in `settings` to it.
-fn configure(name: &str, settings: &[String]) -> Result<Box<dyn Rules>> {
-    let mut game = rules::find(name).ok_or_else(|| {
-        let known: Vec<_> = rules::games().iter().map(|game| game.name()).collect();
-        anyhow!("no game called {name:?}; try {}", known.join(", "))
-    })?;
-
-    for setting in settings {
-        let (key, value) = setting
-            .split_once('=')
-            .ok_or_else(|| anyhow!("--rule wants KEY=VALUE, got {setting:?}"))?;
-        rules::set_option(&mut game, key, value).map_err(|error| anyhow!(error))?;
-    }
-    Ok(game)
-}
-
 /// The menu and a game take turns until the player quits.
-fn run(
-    terminal: &mut DefaultTerminal,
-    chosen: Option<Box<dyn Rules>>,
-    seed: Option<u64>,
-) -> Result<()> {
-    // `--game` skips the menu, and leaving that game leaves the app rather
-    // than dropping into a menu the player never asked for.
-    if let Some(game) = chosen {
-        play(terminal, game, seed.unwrap_or_else(app::random_seed))?;
-        return Ok(());
-    }
-
-    let mut menu = ui::menu::Menu::new();
+fn run(terminal: &mut DefaultTerminal, mut shell: Shell) -> Result<()> {
     loop {
-        let Some(game) = menu.run(terminal)? else {
-            return Ok(());
-        };
-        if play(terminal, game, seed.unwrap_or_else(app::random_seed))? == Exit::Quit {
+        terminal.draw(|frame| shell.draw(frame))?;
+        if let Some(event) = translate(event::read()?)
+            && shell.handle(event) == Flow::Quit
+        {
             return Ok(());
         }
     }
 }
 
-fn play(terminal: &mut DefaultTerminal, game: Box<dyn Rules>, seed: u64) -> Result<Exit> {
-    let mut session = Session::new(game, seed);
-    loop {
-        terminal.draw(|frame| session.draw(frame))?;
-        if let Some(exit) = session.handle(event::read()?) {
-            return Ok(exit);
+/// A seed for a fresh deal. Only needs to differ run to run.
+fn clock_seed() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos() as u64)
+}
+
+/// A crossterm event as the game reads it, or `None` for anything it ignores:
+/// key releases and repeats (which Windows reports), mouse moves and drags,
+/// focus changes. A resize needs no event of its own — the next frame is
+/// drawn at the new size.
+fn translate(event: CEvent) -> Option<Event> {
+    match event {
+        CEvent::Key(key) if key.kind == KeyEventKind::Press => {
+            let code = match key.code {
+                CKeyCode::Char(c) => KeyCode::Char(c),
+                CKeyCode::Up => KeyCode::Up,
+                CKeyCode::Down => KeyCode::Down,
+                CKeyCode::Left => KeyCode::Left,
+                CKeyCode::Right => KeyCode::Right,
+                CKeyCode::Enter => KeyCode::Enter,
+                CKeyCode::Esc => KeyCode::Esc,
+                CKeyCode::Tab => KeyCode::Tab,
+                CKeyCode::BackTab => KeyCode::BackTab,
+                _ => return None,
+            };
+            Some(Event::Key(KeyEvent {
+                code,
+                ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
+            }))
         }
+        CEvent::Mouse(mouse) => {
+            let kind = match mouse.kind {
+                CMouseKind::Down(CButton::Left) => MouseEventKind::Down(MouseButton::Left),
+                CMouseKind::Down(CButton::Right) => MouseEventKind::Down(MouseButton::Right),
+                CMouseKind::Down(CButton::Middle) => MouseEventKind::Down(MouseButton::Middle),
+                CMouseKind::ScrollUp => MouseEventKind::ScrollUp,
+                CMouseKind::ScrollDown => MouseEventKind::ScrollDown,
+                _ => return None,
+            };
+            Some(Event::Mouse(MouseEvent {
+                kind,
+                column: mouse.column,
+                row: mouse.row,
+            }))
+        }
+        _ => None,
     }
 }
 
@@ -152,4 +164,73 @@ fn release_mouse_on_panic() {
         let _ = execute!(stdout(), DisableMouseCapture);
         previous(info);
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::crossterm::event::{KeyEvent as CKeyEvent, KeyEventState, MouseEvent as CMouse};
+
+    fn key(code: CKeyCode, modifiers: KeyModifiers, kind: KeyEventKind) -> CEvent {
+        CEvent::Key(CKeyEvent {
+            code,
+            modifiers,
+            kind,
+            state: KeyEventState::NONE,
+        })
+    }
+
+    #[test]
+    fn only_presses_reach_the_game() {
+        let press = key(CKeyCode::Char('d'), KeyModifiers::NONE, KeyEventKind::Press);
+        assert_eq!(translate(press), Some(KeyCode::Char('d').into()));
+        // Windows reports releases too; acting on them would deal twice.
+        let release = key(
+            CKeyCode::Char('d'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+        assert_eq!(translate(release), None);
+    }
+
+    #[test]
+    fn ctrl_survives_translation_and_shift_is_already_in_the_character() {
+        let redo = key(
+            CKeyCode::Char('r'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Press,
+        );
+        assert_eq!(
+            translate(redo),
+            Some(KeyEvent::ctrl(KeyCode::Char('r')).into())
+        );
+        let hint = key(
+            CKeyCode::Char('H'),
+            KeyModifiers::SHIFT,
+            KeyEventKind::Press,
+        );
+        assert_eq!(translate(hint), Some(KeyCode::Char('H').into()));
+    }
+
+    #[test]
+    fn clicks_keep_their_cell_and_moves_are_dropped() {
+        let at = |kind| {
+            CEvent::Mouse(CMouse {
+                kind,
+                column: 12,
+                row: 7,
+                modifiers: KeyModifiers::NONE,
+            })
+        };
+        assert_eq!(
+            translate(at(CMouseKind::Down(CButton::Left))),
+            Some(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 12,
+                row: 7,
+            }))
+        );
+        assert_eq!(translate(at(CMouseKind::Moved)), None);
+        assert_eq!(translate(at(CMouseKind::Up(CButton::Left))), None);
+    }
 }

@@ -259,6 +259,23 @@ pub fn find(name: &str) -> Option<Box<dyn Rules>> {
         .find(|game| game.name().eq_ignore_ascii_case(name))
 }
 
+/// Look up `name` and apply every `key=value` in `settings` to it — what
+/// `--rule` supplies in the terminal and `?rule=` in the browser.
+pub fn configure<S: AsRef<str>>(name: &str, settings: &[S]) -> Result<Box<dyn Rules>, String> {
+    let mut game = find(name).ok_or_else(|| {
+        let known: Vec<_> = games().iter().map(|game| game.name()).collect();
+        format!("no game called {name:?}; try {}", known.join(", "))
+    })?;
+    for setting in settings {
+        let setting = setting.as_ref();
+        let (key, value) = setting
+            .split_once('=')
+            .ok_or_else(|| format!("a rule is KEY=VALUE, got {setting:?}"))?;
+        set_option(&mut game, key, value)?;
+    }
+    Ok(game)
+}
+
 /// Apply a `key=value` rule setting to `game`, as `--rule` supplies it.
 ///
 /// Returns the label and value it matched so the caller can report what it did,

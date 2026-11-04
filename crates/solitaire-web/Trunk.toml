@@ -1,0 +1,6 @@
+[build]
+target = "index.html"
+dist = "dist"
+# Served from a project page (user.github.io/solitaire-tui/), so asset URLs must
+# be relative. `trunk serve` still works at the root.
+public_url = "./"

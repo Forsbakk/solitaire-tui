@@ -1,14 +1,10 @@
 //! Cursor, selection, undo history, and input handling.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use ratatui::Frame;
-use ratatui::crossterm::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
-};
 use ratatui::layout::Rect;
 
 use crate::board::{Action, Board, BoardSpec, Fan, Move, MoveError, PileId, PileKind};
+use crate::input::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use crate::rules::Rules;
 use crate::ui::layout::{self, BoardLayout, board_width, min_board_height};
 use crate::ui::render::{self, Focus, Tone};
@@ -47,6 +43,9 @@ pub struct Session {
     show_help: bool,
     /// The layout the last frame was drawn from, used to resolve clicks.
     layout: Option<BoardLayout>,
+    /// Where `n` gets its next deal from. The frontend supplies a clock — the
+    /// engine has none, since `std::time` panics on the web.
+    seeds: fn() -> u64,
 }
 
 impl Session {
@@ -69,9 +68,16 @@ impl Session {
             tone: Tone::Warn,
             show_help: false,
             layout: None,
+            seeds: no_clock,
         };
         session.snap_cursor();
         session
+    }
+
+    /// Take fresh deals for `n` from `seeds` rather than the fallback.
+    pub fn with_seeds(mut self, seeds: fn() -> u64) -> Self {
+        self.seeds = seeds;
+        self
     }
 
     fn focus(&self) -> Focus {
@@ -161,15 +167,14 @@ impl Session {
     /// Handle `event`. `Some` when the player asked to leave the game.
     pub fn handle(&mut self, event: Event) -> Option<Exit> {
         match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => return self.on_key(key),
+            Event::Key(key) => return self.on_key(key),
             Event::Mouse(mouse) => self.on_mouse(mouse),
-            _ => {}
         }
         None
     }
 
     fn on_key(&mut self, key: KeyEvent) -> Option<Exit> {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        let ctrl = key.ctrl;
         if ctrl && matches!(key.code, KeyCode::Char('c')) {
             return Some(Exit::Quit);
         }
@@ -198,7 +203,7 @@ impl Session {
             KeyCode::Char('H') => self.suggest(),
             KeyCode::Char('r') if ctrl => self.redo(),
             KeyCode::Char('u') => self.undo(),
-            KeyCode::Char('n') => self.restart(random_seed()),
+            KeyCode::Char('n') => self.restart((self.seeds)()),
             KeyCode::Char('r') => self.restart(self.board.seed()),
             KeyCode::Char('d') => self.deal_stock(),
             KeyCode::Char('f') => self.play(),
@@ -694,11 +699,13 @@ fn row_order(spec: &BoardSpec, row: u8) -> Vec<PileId> {
     spots.iter().map(|spot| spot.pile).collect()
 }
 
-/// A seed for a fresh deal. Only needs to differ run to run.
-pub fn random_seed() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_nanos() as u64)
+/// The fallback seed source: a session with no clock still deals something
+/// new on `n`. Only tests rely on it, and they only need the deal to change —
+/// it counts up from far beyond any seed a test picks by hand.
+fn no_clock() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 =
+        std::sync::atomic::AtomicU64::new(0x9E37_79B9_7F4A_7C15);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 #[cfg(test)]
@@ -709,7 +716,6 @@ mod tests {
     use crate::rules::scorpion::Scorpion;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    use ratatui::crossterm::event::KeyEventState;
 
     fn scorpion(seed: u64) -> Session {
         Session::new(Box::new(Scorpion), seed)
@@ -744,12 +750,7 @@ mod tests {
     }
 
     fn press(session: &mut Session, code: KeyCode) {
-        session.handle(Event::Key(KeyEvent {
-            code,
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }));
+        session.handle(code.into());
     }
 
     #[test]
@@ -858,32 +859,24 @@ mod tests {
         assert_ne!(session.board.seed(), deal.seed());
     }
 
-    fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
-        Event::Key(KeyEvent {
-            code,
-            modifiers,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        })
+    fn key(code: KeyCode, ctrl: bool) -> Event {
+        Event::Key(KeyEvent { code, ctrl })
     }
 
     #[test]
     fn only_the_leaving_keys_leave() {
         let mut session = scorpion(3);
+        assert_eq!(session.handle(key(KeyCode::Char('j'), false)), None);
         assert_eq!(
-            session.handle(key(KeyCode::Char('j'), KeyModifiers::NONE)),
-            None
-        );
-        assert_eq!(
-            session.handle(key(KeyCode::Char('m'), KeyModifiers::NONE)),
+            session.handle(key(KeyCode::Char('m'), false)),
             Some(Exit::Menu)
         );
         assert_eq!(
-            session.handle(key(KeyCode::Char('q'), KeyModifiers::NONE)),
+            session.handle(key(KeyCode::Char('q'), false)),
             Some(Exit::Quit)
         );
         assert_eq!(
-            session.handle(key(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            session.handle(key(KeyCode::Char('c'), true)),
             Some(Exit::Quit)
         );
     }
@@ -893,7 +886,7 @@ mod tests {
         let mut session = scorpion(3);
         press(&mut session, KeyCode::Char('?'));
         assert_eq!(
-            session.handle(key(KeyCode::Char('q'), KeyModifiers::NONE)),
+            session.handle(key(KeyCode::Char('q'), false)),
             None,
             "dismissing help must not also quit"
         );
@@ -1024,7 +1017,6 @@ mod tests {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: x,
             row: y,
-            modifiers: KeyModifiers::NONE,
         }));
     }
 

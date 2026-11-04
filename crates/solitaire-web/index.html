@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solitaire</title>
+    <!-- rustc's wasm target emits these features by default; wasm-opt rejects
+         them unless told, and fails the release build. -->
+    <link
+      data-trunk
+      rel="rust"
+      data-wasm-opt="z"
+      data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue"
+    />
+    <style>
+      html, body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background-color: #000;
+      }
+      pre {
+        margin: 0;
+        /* Fonts that carry box drawing and the four suits themselves, so no
+           glyph falls back to a proportional font and widens its column. */
+        font-family: "DejaVu Sans Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
+        font-size: 16px;
+        line-height: normal;
+      }
+      /* Every cell exactly one column wide, whatever the font does with a
+         glyph — the board is a grid, and clicks are resolved against it. */
+      pre span {
+        display: inline-block;
+        width: 1ch;
+        overflow: hidden;
+        vertical-align: top;
+      }
+    </style>
+  </head>
+  <body></body>
+</html>

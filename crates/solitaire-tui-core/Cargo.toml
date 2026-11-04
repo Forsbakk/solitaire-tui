@@ -1,0 +1,19 @@
+[package]
+name = "solitaire-tui-core"
+description = "The engine behind solitaire-tui: eight solitaire games, their rules, and a ratatui board renderer, with no terminal attached"
+readme = "../../README.md"
+keywords = ["solitaire", "cards", "game", "ratatui"]
+categories = ["games"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+
+[dependencies]
+# No backend: the engine draws into a ratatui `Frame` and reads `input::Event`s,
+# and never learns whether that is a terminal or a browser. Enabling crossterm
+# here would break the wasm build — which is how CI notices.
+ratatui = { workspace = true, features = ["std", "layout-cache"] }

@@ -1,0 +1,19 @@
+[package]
+name = "solitaire-tui"
+description = "Eight solitaire games in the terminal — Klondike, FreeCell, Scorpion, Yukon, Russian, Spiderette, Spider and Mod3"
+readme = "../../README.md"
+keywords = ["solitaire", "tui", "game", "cards", "ratatui"]
+categories = ["games", "command-line-utilities"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+
+[dependencies]
+solitaire-tui-core.workspace = true
+anyhow = "1.0.104"
+clap = { version = "4.6.5", features = ["derive"] }
+ratatui = { workspace = true, features = ["crossterm"] }

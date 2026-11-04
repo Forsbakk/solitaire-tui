@@ -31,7 +31,7 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
+      - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
 
   # Cargo.toml claims rust-version = "1.88" (ratatui 0.30's floor). Prove it.
@@ -42,3 +42,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-targets
+      # The browser build has its own toolchain (wasm-bindgen pins its own
+      # floor), so the MSRV promise is the terminal game's alone.
+
+  # The engine must stay free of anything that cannot run in a browser — a
+  # crossterm import, a `std::time` call. Checking the web frontend for wasm
+  # checks the engine for wasm with it.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p solitaire-web --target wasm32-unknown-unknown -- -D warnings
