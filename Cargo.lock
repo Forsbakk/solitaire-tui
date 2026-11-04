@@ -994,7 +994,7 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
 name = "solitaire-tui"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1004,14 +1004,14 @@ dependencies = [
 
 [[package]]
 name = "solitaire-tui-core"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "ratatui",
 ]
 
 [[package]]
 name = "solitaire-web"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "js-sys",
  "ratzilla",
