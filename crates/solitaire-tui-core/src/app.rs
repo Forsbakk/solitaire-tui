@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use crate::board::{Action, Board, BoardSpec, Fan, Move, MoveError, PileId, PileKind};
 use crate::input::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use crate::rules::Rules;
-use crate::ui::layout::{self, BoardLayout, board_width, min_board_height};
+use crate::ui::layout::{self, BoardLayout, Hit, board_width, min_board_height};
 use crate::ui::render::{self, Focus, Tone};
 
 /// Rows reserved at the bottom for the status bar.
@@ -80,7 +80,8 @@ impl Session {
         self
     }
 
-    fn focus(&self) -> Focus {
+    /// The cursor, the held tail and the hint target, together.
+    pub fn focus(&self) -> Focus {
         Focus {
             pile: self.cursor_pile,
             card: self.cursor_card,
@@ -248,29 +249,8 @@ impl Session {
                     .layout
                     .as_ref()
                     .and_then(|layout| layout.hit(mouse.column, mouse.row));
-                let Some(hit) = hit else { return };
-
-                if self.selection.is_some() {
-                    self.drop_on(hit.pile);
-                    return;
-                }
-                self.cursor_pile = hit.pile;
-                // Clicking a pile that does something — the stock — does it,
-                // rather than trying to pick a card off it.
-                if let Some(action) = self.rules.activate(&self.board, hit.pile) {
-                    self.perform(action);
-                    return;
-                }
-                match hit.card {
-                    Some(index) if self.board.pile(hit.pile).is_face_up(index) => {
-                        self.cursor_card = Some(index);
-                        self.select(index);
-                    }
-                    Some(_) => {
-                        self.snap_cursor();
-                        self.warn(MoveError::FaceDown.message());
-                    }
-                    None => self.snap_cursor(),
+                if let Some(hit) = hit {
+                    self.click(hit);
                 }
             }
             MouseEventKind::Down(MouseButton::Right) => {
@@ -281,6 +261,92 @@ impl Session {
             MouseEventKind::ScrollDown => self.step_card(1),
             _ => {}
         }
+    }
+
+    /// A press on `hit`, however the frontend worked out what was under it:
+    /// drop the held tail there, work the pile (the stock deals), or pick the
+    /// card up. The terminal resolves a cell through the layout of the last
+    /// frame; the graphical frontend resolves pixels through its own.
+    pub fn click(&mut self, hit: Hit) {
+        if self.show_help {
+            self.show_help = false;
+            return;
+        }
+        self.clear_hint();
+        if self.selection.is_some() {
+            self.drop_on(hit.pile);
+            return;
+        }
+        self.cursor_pile = hit.pile;
+        // Clicking a pile that does something — the stock — does it, rather
+        // than trying to pick a card off it.
+        if let Some(action) = self.rules.activate(&self.board, hit.pile) {
+            self.perform(action);
+            return;
+        }
+        match hit.card {
+            Some(index) if self.board.pile(hit.pile).is_face_up(index) => {
+                self.cursor_card = Some(index);
+                self.select(index);
+            }
+            Some(_) => {
+                self.snap_cursor();
+                self.warn(MoveError::FaceDown.message());
+            }
+            None => self.snap_cursor(),
+        }
+    }
+
+    // -- state, for frontends that draw it themselves -----------------------
+
+    pub fn board(&self) -> &Board {
+        &self.board
+    }
+
+    pub fn rules(&self) -> &dyn Rules {
+        self.rules.as_ref()
+    }
+
+    pub fn spec(&self) -> &BoardSpec {
+        &self.spec
+    }
+
+    /// The fanned piles by column, as the digit keys number them.
+    pub fn columns(&self) -> &[Vec<PileId>] {
+        &self.columns
+    }
+
+    /// The move the last hint suggested, while it is still on show.
+    pub fn hint(&self) -> Option<Move> {
+        self.hint
+    }
+
+    /// What the status line is saying, and why.
+    pub fn message(&self) -> (&str, Tone) {
+        (&self.message, self.tone)
+    }
+
+    pub fn is_showing_help(&self) -> bool {
+        self.show_help
+    }
+
+    pub fn is_won(&self) -> bool {
+        self.rules.is_won(&self.board)
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.future.is_empty()
+    }
+
+    /// Let go of the held tail without dropping it anywhere, keeping whatever
+    /// the status line says — a dragged card snapping back after a refused
+    /// drop should leave the refusal on show, which `Esc` would clear.
+    pub fn put_down(&mut self) {
+        self.selection = None;
     }
 
     // -- cursor -----------------------------------------------------------
@@ -1046,6 +1112,26 @@ mod tests {
             .selection
             .expect("clicking a face-up card picks it up");
         assert_eq!(session.board.pile(pile).cards()[index].to_string(), "K♦");
+    }
+
+    #[test]
+    fn a_click_by_hit_picks_up_and_drops_like_a_mouse_press() {
+        let mut session = scorpion(42);
+        let mv = session.rules().suggestions(session.board())[0];
+        let moves = session.board().moves();
+
+        session.click(Hit {
+            pile: mv.from,
+            card: Some(mv.index),
+        });
+        assert_eq!(session.focus().selection, Some((mv.from, mv.index)));
+
+        session.click(Hit {
+            pile: mv.to,
+            card: None,
+        });
+        assert_eq!(session.focus().selection, None);
+        assert_eq!(session.board().moves(), moves + 1, "the move was played");
     }
 
     #[test]
