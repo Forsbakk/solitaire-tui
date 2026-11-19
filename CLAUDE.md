@@ -11,16 +11,19 @@ cargo run --release -- --game klondike --rule draw=1  # set a game's rules
 cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck board
 cargo run --release -- --list                         # games and their rules
 
-cargo test                          # all 279 tests (276 core, 3 tui adapter; web has none)
+cargo test                          # 280 tests (277 core, 3 tui adapter)
+cargo test -p solitaire-gui          # the card table's 13 layout/animation/menu tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 
-# the browser build — needs `rustup target add wasm32-unknown-unknown` and trunk
+# the browser builds — need `rustup target add wasm32-unknown-unknown` and trunk
+cargo clippy -p solitaire-gui --target wasm32-unknown-unknown -- -D warnings
 cargo clippy -p solitaire-web --target wasm32-unknown-unknown -- -D warnings
-cd crates/solitaire-web && trunk serve    # http://127.0.0.1:8080/?game=scorpion&seed=42
+cd crates/solitaire-gui && trunk serve    # card table: http://127.0.0.1:8090/?game=scorpion&seed=42
+cd crates/solitaire-web && trunk serve    # terminal in a tab: http://127.0.0.1:8080/
 ```
 
 The directory, the terminal crate and its binary are all `solitaire-tui`
@@ -28,7 +31,9 @@ The directory, the terminal crate and its binary are all `solitaire-tui`
 patience game on Arch). The engine is `solitaire-tui-core` because `solitaire-core`
 was taken too. There is no integration test directory — every test is a
 `#[cfg(test)] mod tests` inside the module it covers — all but the crossterm
-adapter's live in the core crate.
+adapter's and the card table's live in the core crate. `solitaire-gui` is not a
+default member, so its tests need `-p solitaire-gui`; they are plain Rust and
+run on the host.
 
 ## Releasing
 
@@ -42,9 +47,10 @@ it by version: `cargo publish -p solitaire-tui-core && cargo publish -p solitair
 Both take their version from `[workspace.package]`; bump the
 `solitaire-tui-core` version in `[workspace.dependencies]` alongside it.
 
-`.github/workflows/pages.yml` builds `crates/solitaire-web` with Trunk and deploys
-it to GitHub Pages on every push to `main`. The `wasm` job in `ci.yml` is what
-stops the engine picking up anything that cannot run in a browser.
+`.github/workflows/pages.yml` builds `crates/solitaire-gui` with Trunk as the site
+root and `crates/solitaire-web` into its `dist/tui`, and deploys both to GitHub
+Pages on every push to `main`. The `wasm` job in `ci.yml` is what stops the engine
+picking up anything that cannot run in a browser.
 
 Pushing a `v*` tag builds five targets and uploads them to a GitHub release:
 
@@ -59,13 +65,14 @@ and SmartScreen.
 
 ## Architecture
 
-A workspace of three packages. Paths below are inside `crates/solitaire-tui-core/src`
+A workspace of four packages. Paths below are inside `crates/solitaire-tui-core/src`
 unless they say otherwise.
 
 ```
 solitaire-tui/src/main.rs  terminal frontend: CLI, crossterm, crossterm → input::Event
-solitaire-web/src/main.rs  browser frontend: Ratzilla, DOM events → input::Event, ?query
-shell.rs     Shell: the menu ⇄ game state machine both frontends drive
+solitaire-web/src/main.rs  terminal-in-a-tab frontend: Ratzilla, DOM events → input::Event
+solitaire-gui/src/         graphical browser frontend: canvas card table (see below)
+shell.rs     Shell: the menu ⇄ game state machine both ratatui frontends drive
 input.rs     Event/KeyEvent/MouseEvent — what the player did, from anywhere
 card.rs      Card, Suit, shuffled_deck/shuffled_decks — no game knowledge
 board.rs     Pile, Board, Move, Action/Step, BoardSpec — state, no rules
@@ -77,8 +84,10 @@ app.rs       Session: cursor, selection, undo stacks, input
 ```
 
 Dependencies point one way: frontend → `shell` → `app` → {`rules`, `ui`} →
-`board` → `card`. `rules` never imports `ui`, which is why `BoardSpec` lives in
-`board.rs` even though only the layout consumes it.
+`board` → `card`. The graphical frontend skips `shell` and drives `Session`
+directly, since `Shell` exists to draw ratatui frames. `rules` never imports
+`ui`, which is why `BoardSpec` lives in `board.rs` even though only the layout
+consumes it.
 
 ### The engine has no terminal
 
@@ -103,6 +112,35 @@ The web frontend listens on the document itself rather than through Ratzilla's
 which it rebuilds on every resize, and they cannot `preventDefault`. A click's
 cell is read from the DOM — the span's index in its `<pre>` is the column, the
 `<pre>`'s index in the grid is the row — so it is exact whatever the font or zoom.
+
+### The card table drives the same `Session`
+
+`solitaire-gui` is a second browser frontend that draws a real card table on a
+`<canvas>` instead of a terminal grid. It holds a `Session` and never reimplements
+game logic: keys go to `Session::handle` exactly as the terminal sends them
+(Ctrl-Z/Ctrl-Y are respelled `u`/Ctrl-R first), and pointer presses go to
+`Session::click(Hit)` with the pile and card resolved against the GUI's own pixel
+layout. A drag is a click on the card, then a click on the pile it is dropped
+over, then `Session::put_down` (a no-op after a legal drop, a snap-back after a
+refused one, keeping the refusal message). It reads state back through
+`Session`'s accessors (`board`, `focus`, `message`, `can_undo`, …).
+
+- `layout.rs` is its single source of truth, mirroring `ui/layout.rs`: built from
+  the game's `BoardSpec`, drawn from by `render.rs`, hit-tested by `hit` and
+  `drop_target`. `every_card_drawn_in_a_fan_resolves_back_to_itself` guards it
+  for every game at desktop, phone, short and huge sizes.
+- `anim.rs` animates by **diffing**: snapshot where every card is shown before
+  an input, lay out after it, pair cards by value (same place first, then the
+  nearest twin for two-deck games), tween whatever moved or flipped. That covers
+  moves, undo, stock deals, Spider filing runs and `A` with no hooks in the
+  engine — don't add per-action animation plumbing to core.
+- `cards.rs` paints cards from paths (suits are bezier shapes, not font glyphs)
+  straight onto the table every frame. Don't reintroduce an offscreen-canvas
+  cache stamped with `drawImage`: Zen (Gecko, GPU canvas) drew only the shadow of
+  each stamped card. Below `layout::SMALL_CARD` a card shows one big index and
+  suit, and the face-up fan step deepens to match.
+- `chrome.rs` writes the menu, help, win dialog and status line as HTML; clicks
+  are routed in `main.rs` by `data-action`.
 
 ### Adding a game is one file plus a registry line
 

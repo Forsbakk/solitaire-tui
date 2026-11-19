@@ -1,10 +1,13 @@
 name: pages
 
-# The browser build, published to GitHub Pages on every push to main. It is a
-# static site — Trunk's dist/ — so there is no server to run.
+# The browser builds, published to GitHub Pages on every push to main that
+# touches code. It is a static site — Trunk's dist/ — so there is no server to
+# run. Neither Markdown nor packaging ends up in it, so pushes touching only
+# those skip it.
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "packaging/**"]
   workflow_dispatch:
 
 permissions:
@@ -28,11 +31,16 @@ jobs:
       - uses: jetli/trunk-action@v0.5.0
         with:
           version: latest
+      # The card table is the site; the terminal build lives beside it at
+      # /tui/, linked from the game menu. Both use relative asset URLs, so
+      # neither needs to know where it is mounted.
       - run: trunk build --release
+        working-directory: crates/solitaire-gui
+      - run: trunk build --release --dist ../solitaire-gui/dist/tui
         working-directory: crates/solitaire-web
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: crates/solitaire-web/dist
+          path: crates/solitaire-gui/dist
 
   deploy:
     needs: build

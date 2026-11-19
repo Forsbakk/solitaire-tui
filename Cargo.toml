@@ -1,8 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/solitaire-tui-core", "crates/solitaire-tui", "crates/solitaire-web"]
+members = [
+    "crates/solitaire-tui-core",
+    "crates/solitaire-tui",
+    "crates/solitaire-web",
+    "crates/solitaire-gui",
+]
 # A bare `cargo build`/`cargo test` is the terminal game and its engine. The web
-# frontend is opt-in (`-p solitaire-web` or Trunk), so nobody installing the TUI
+# frontends are opt-in (`-p solitaire-gui`/`-p solitaire-web` or Trunk), so nobody installing the TUI
 # compiles a line of it.
 default-members = ["crates/solitaire-tui-core", "crates/solitaire-tui"]
 

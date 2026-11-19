@@ -1,0 +1,39 @@
+[package]
+name = "solitaire-gui"
+description = "solitaire-tui's games on a graphical card table, in the browser"
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+solitaire-tui-core.workspace = true
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "CanvasGradient",
+    "CanvasRenderingContext2d",
+    "console",
+    "CssStyleDeclaration",
+    "Document",
+    "DomRect",
+    "DomStringMap",
+    "Element",
+    "Event",
+    "EventTarget",
+    "History",
+    "HtmlCanvasElement",
+    "HtmlElement",
+    "KeyboardEvent",
+    "Location",
+    "MouseEvent",
+    "Node",
+    "Performance",
+    "PointerEvent",
+    "ResizeObserver",
+    "Storage",
+    "TextMetrics",
+    "Window",
+] }

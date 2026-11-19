@@ -1,9 +1,13 @@
 name: ci
 
+# Prose and packaging changes cannot break the build, so they do not run it —
+# including the formula the release workflow commits back to main.
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "packaging/**"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "packaging/**"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -46,8 +50,9 @@ jobs:
       # floor), so the MSRV promise is the terminal game's alone.
 
   # The engine must stay free of anything that cannot run in a browser — a
-  # crossterm import, a `std::time` call. Checking the web frontend for wasm
-  # checks the engine for wasm with it.
+  # crossterm import, a `std::time` call. Checking the browser frontends for
+  # wasm checks the engine for wasm with them. The graphical frontend's layout
+  # and animation tests are plain Rust, so they run on the host.
   wasm:
     runs-on: ubuntu-latest
     steps:
@@ -58,3 +63,5 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -p solitaire-web --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo clippy -p solitaire-gui --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo test -p solitaire-gui

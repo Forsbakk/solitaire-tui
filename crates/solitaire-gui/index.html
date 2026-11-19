@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- No zoom: pinching would fight dragging cards, and the table already
+         scales its cards to the screen. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0c2c1a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="Klondike, FreeCell, Spider and five more solitaires, in the browser." />
+    <title>Solitaire</title>
+    <link data-trunk rel="copy-file" href="manifest.webmanifest" />
+    <link data-trunk rel="copy-file" href="icon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <!-- rustc's wasm target emits these features by default; wasm-opt rejects
+         them unless told, and fails the release build. -->
+    <link
+      data-trunk
+      rel="rust"
+      data-wasm-opt="z"
+      data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue"
+    />
+    <style>
+      :root {
+        --bar: #0c2c1a;
+        --bar-edge: rgba(255, 255, 255, 0.08);
+        --ink: #eef3ec;
+        --muted: rgba(238, 243, 236, 0.62);
+        --accent: #ffd34d;
+        --good: #8ff0b4;
+        --warn: #ffb4a8;
+        --sheet: #fbfaf5;
+        --sheet-ink: #1d2420;
+        --sheet-muted: #5d6a62;
+        --felt: #1f6b40;
+        --primary: #1f7a49;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bar);
+        color: var(--ink);
+        font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none;
+      }
+      #app {
+        height: 100dvh;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        grid-template-rows: auto 1fr;
+        grid-template-areas: "brand status tools" "table table table";
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+      }
+      #brand {
+        grid-area: brand;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        border: 0;
+        background: none;
+        color: var(--ink);
+        font: 600 17px Georgia, "Times New Roman", serif;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+      }
+      #brand .logo { color: var(--accent); font-size: 20px; }
+      #status {
+        grid-area: status;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-width: 0;
+        padding: 0 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        font-variant-numeric: tabular-nums;
+      }
+      #status .title { font-weight: 600; }
+      #status .stat { color: var(--ink); }
+      #status .stat span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 2px; }
+      #status .stat.muted { opacity: 0.55; }
+      #status .stat.good { color: var(--good); }
+      #tools {
+        grid-area: tools;
+        display: flex;
+        gap: 2px;
+        padding: 6px 8px;
+      }
+      #tools button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-width: 56px;
+        height: 48px;
+        padding: 4px 6px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--ink);
+        font: 500 11px system-ui, sans-serif;
+        cursor: pointer;
+        touch-action: manipulation;
+        transition: background 120ms, opacity 120ms;
+      }
+      #tools button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+      #tools button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); }
+      #tools button:active:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
+      #tools button:disabled { opacity: 0.32; cursor: default; }
+      #tools button[data-state="gone"] { display: none; }
+      #tools button[data-state="ready"] { color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+      @keyframes pulse { 50% { background: rgba(255, 211, 77, 0.16); } }
+      #table {
+        grid-area: table;
+        position: relative;
+        min-height: 0;
+        background: var(--felt);
+        overflow: hidden;
+      }
+      #felt {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        cursor: default;
+      }
+      #toast {
+        position: absolute;
+        left: 50%;
+        bottom: 18px;
+        max-width: calc(100% - 32px);
+        transform: translate(-50%, 16px);
+        padding: 9px 16px;
+        border-radius: 999px;
+        background: rgba(8, 24, 15, 0.9);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+        color: var(--ink);
+        font-size: 14px;
+        text-align: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 160ms, transform 160ms;
+      }
+      #toast.show { opacity: 1; transform: translate(-50%, 0); }
+      #toast.warn { color: var(--warn); }
+      #toast.hint { color: var(--good); }
+
+      /* Sheets: the menu, help, and the win dialog. */
+      #overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(4, 16, 9, 0.55);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+        animation: fade 160ms ease-out;
+      }
+      #overlay[hidden] { display: none; }
+      @keyframes fade { from { opacity: 0; } }
+      @keyframes rise { from { transform: translateY(14px) scale(0.98); opacity: 0; } }
+      .sheet {
+        width: min(640px, 100%);
+        max-height: calc(100dvh - 32px);
+        overflow: auto;
+        border-radius: 16px;
+        background: var(--sheet);
+        color: var(--sheet-ink);
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+        animation: rise 200ms ease-out;
+      }
+      .sheet.menu-sheet { width: min(860px, 100%); }
+      .sheet header {
+        position: sticky;
+        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px 10px;
+        background: var(--sheet);
+        z-index: 1;
+      }
+      .sheet h2 { margin: 0; font: 600 22px Georgia, "Times New Roman", serif; }
+      .sheet h3 { margin: 18px 0 6px; font-size: 15px; }
+      .sheet p { margin: 0 0 10px; color: var(--sheet-muted); }
+      .sheet button {
+        font: 600 14px system-ui, sans-serif;
+        padding: 10px 18px;
+        border-radius: 10px;
+        border: 1px solid #d4d8d2;
+        background: #fff;
+        color: var(--sheet-ink);
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .sheet button:hover { background: #f1f3ef; }
+      .sheet button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+      .sheet button.primary:hover { background: #196a3e; }
+      .sheet button.close { padding: 6px 12px; border: 0; background: none; font-size: 18px; color: var(--sheet-muted); }
+      .menu { display: grid; grid-template-columns: 260px 1fr; gap: 20px; padding: 4px 20px 20px; }
+      .games { display: flex; flex-direction: column; gap: 6px; }
+      .games .game {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        text-align: left;
+        padding: 10px 14px;
+        border: 1px solid transparent;
+        background: transparent;
+      }
+      .games .game .name { font-size: 15px; }
+      .games .game .tag { font-weight: 400; font-size: 12.5px; color: var(--sheet-muted); }
+      .games .game.on { background: #e5f2e9; border-color: #a9d3b7; }
+      .detail h3 { margin-top: 6px; font: 600 20px Georgia, serif; }
+      .option { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+      .option > span { min-width: 72px; font-weight: 600; }
+      .seg { display: inline-flex; border: 1px solid #d4d8d2; border-radius: 10px; overflow: hidden; }
+      .seg button { border: 0; border-radius: 0; padding: 8px 14px; font-weight: 500; }
+      .seg button + button { border-left: 1px solid #d4d8d2; }
+      .seg button.on { background: var(--primary); color: #fff; }
+      .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+      .actions .link { margin-left: auto; color: var(--sheet-muted); font-size: 13px; }
+      .help { padding: 0 20px 20px; }
+      .help dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+      .help dt { font-weight: 600; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; padding-top: 1px; }
+      .help dd { margin: 0; color: var(--sheet-muted); }
+      .win { padding: 28px 24px 22px; text-align: center; }
+      .win .trophy { font-size: 44px; color: #d4a72c; line-height: 1; }
+      .win h2 { margin: 8px 0 6px; font-size: 28px; }
+      .win .actions { justify-content: center; }
+      .win .muted { font-size: 13px; }
+      .win-sheet { width: min(380px, 100%); }
+      #overlay:has(.win-sheet) { background: rgba(4, 16, 9, 0.25); backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+      /* A phone, or any narrow window: the tools move to a bottom bar within
+         thumb's reach, and the status line keeps only what fits. */
+      @media (max-width: 760px), (max-height: 520px) and (max-width: 960px) {
+        #app {
+          grid-template-columns: auto 1fr;
+          grid-template-rows: auto 1fr auto;
+          grid-template-areas: "brand status" "table table" "tools tools";
+          padding-bottom: 0;
+        }
+        #brand { padding: 8px 10px; font-size: 15px; }
+        #brand .word { display: none; }
+        #status { gap: 12px; font-size: 13.5px; justify-content: flex-end; padding-right: 12px; }
+        #status .wide { display: none; }
+        #tools {
+          justify-content: space-around;
+          padding: 2px 4px calc(2px + env(safe-area-inset-bottom));
+          border-top: 1px solid var(--bar-edge);
+        }
+        #tools button { min-width: 0; flex: 1; height: 50px; font-size: 10.5px; }
+        #tools button[data-action="restart"] { display: none; }
+        .menu { grid-template-columns: 1fr; }
+        .games { display: grid; grid-template-columns: 1fr 1fr; }
+        .games .game .tag { display: none; }
+      }
+      @media (max-height: 520px) and (max-width: 960px) {
+        /* A phone on its side: every pixel of height is table. */
+        #tools button { height: 40px; }
+        #tools button span { display: none; }
+        #brand, #status { padding-top: 2px; padding-bottom: 2px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <button id="brand" data-action="menu" title="Choose a game (m)">
+        <span class="logo">♠</span><span class="word">Solitaire</span>
+      </button>
+      <div id="status" aria-live="polite"></div>
+      <nav id="tools" aria-label="Game">
+        <button data-action="menu" title="Choose a game (m)">
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+          <span>Games</span>
+        </button>
+        <button data-action="new" title="New deal (n)">
+          <svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="12" height="17" rx="2"/><path d="M11 9v6M8 12h6"/></svg>
+          <span>New</span>
+        </button>
+        <button data-action="restart" title="Replay this deal (r)">
+          <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>
+          <span>Replay</span>
+        </button>
+        <button data-action="undo" title="Undo (u, Ctrl-Z)" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+          <span>Undo</span>
+        </button>
+        <button data-action="redo" title="Redo (Ctrl-R, Ctrl-Y)" disabled>
+          <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+          <span>Redo</span>
+        </button>
+        <button data-action="hint" title="Hint (H)">
+          <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+          <span>Hint</span>
+        </button>
+        <button data-action="deal" title="Deal from the stock (d)">
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="10" height="14" rx="1.8"/><path d="M8 4.5h8.7a1.8 1.8 0 0 1 1.8 1.8V18"/><path d="M17 12h4m-2-2 2 2-2 2"/></svg>
+          <span>Deal</span>
+        </button>
+        <button data-action="finish" title="Finish — play every free card home (A)" disabled>
+          <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/><path d="M5 19h14"/></svg>
+          <span>Finish</span>
+        </button>
+        <button data-action="help" title="Help (?)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><path d="M12 17.2v.1"/></svg>
+          <span>Help</span>
+        </button>
+      </nav>
+      <main id="table">
+        <canvas id="felt" aria-label="The card table"></canvas>
+        <div id="toast" role="status"></div>
+      </main>
+    </div>
+    <div id="overlay" hidden><div id="sheet" class="sheet" role="dialog" aria-modal="true"></div></div>
+  </body>
+</html>

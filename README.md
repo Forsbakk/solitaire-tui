@@ -84,14 +84,30 @@ the box-drawing and suit characters the board is made of.
 
 ### In the browser
 
-The same game runs in a browser tab, compiled to WebAssembly and drawn with
-[Ratzilla](https://github.com/ratatui/ratzilla).
+All eight games also run in a browser tab on a proper card table — cards drawn
+in code on a canvas, dragged with the mouse or a finger, flying home with a
+little animation. It is compiled to WebAssembly from the same engine, so a seed
+deals the same cards there as in the terminal.
 
 **[Play it in your browser](https://forsbakk.github.io/solitaire-tui/)**
 
-The query string does what the command-line flags do, so a deal can be shared as
-a link: `?game=klondike&rule=draw=1&seed=42`. In a tab, `q` returns to the menu,
-since there is nothing to quit to, and `ctrl-c` is left to the browser as copy.
+- **Mouse and touch:** drag a card (or a run, from the card you grab) onto where
+  it goes, or tap it and then tap where it goes. Double-click or double-tap sends
+  a card home, or to the one place it fits. Tap the stock to deal; right-click
+  puts down what you are holding.
+- **Keyboard:** every key from the terminal game works, plus `ctrl-z` to undo and
+  `ctrl-y` to redo. Arrow keys bring up a cursor; `?` lists them all.
+- **Phones:** the toolbar moves to the bottom of the screen, small cards switch
+  to a large index, and the page can be added to the home screen.
+
+The address bar always holds the current deal — `?game=klondike&rule=draw=1&seed=42`
+— so a deal can be shared as a link, and the last game and its rules are
+remembered between visits.
+
+The terminal game itself, drawn with [Ratzilla](https://github.com/ratatui/ratzilla),
+is at [/tui/](https://forsbakk.github.io/solitaire-tui/tui/) and takes the same
+query string. There, `q` returns to the menu, since there is nothing to quit to,
+and `ctrl-c` is left to the browser as copy.
 
 ## Playing
 
@@ -403,12 +419,13 @@ that could come next, and what each would cost, are sketched in
 
 ## Development
 
-The repository is a Cargo workspace of three packages:
+The repository is a Cargo workspace of four packages:
 
 ```
 crates/solitaire-tui-core   the engine: cards, rules, layout, drawing — no terminal
 crates/solitaire-tui        the terminal game (crossterm), published to crates.io
-crates/solitaire-web        the browser game (Ratzilla), never published
+crates/solitaire-gui        the browser card table (canvas), never published
+crates/solitaire-web        the terminal game in a browser (Ratzilla), never published
 ```
 
 A bare `cargo` command at the root builds and tests the first two only.
@@ -419,12 +436,14 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 
-The browser build needs the wasm target and [Trunk](https://trunkrs.dev):
+The browser builds need the wasm target and [Trunk](https://trunkrs.dev):
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install trunk --locked
+cd crates/solitaire-gui && trunk serve   # http://127.0.0.1:8090/?game=scorpion&seed=42
 cd crates/solitaire-web && trunk serve   # http://127.0.0.1:8080/?game=scorpion&seed=42
+cargo test -p solitaire-gui              # the card table's layout and animation
 ```
 
 The rules live in `crates/solitaire-tui-core/src/rules/` and are fully testable without a terminal; each
