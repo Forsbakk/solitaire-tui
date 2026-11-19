@@ -64,10 +64,17 @@ pub fn suit_path(ctx: &Ctx, suit: Suit, cx: f64, cy: f64, size: f64) {
         }
         Suit::Clubs => {
             let r = 0.215 * size;
-            for (x, y) in [p(0.0, -0.25), p(-0.25, 0.07), p(0.25, 0.07)] {
+            // Three lobes, and a fourth disc where they meet: the lobes alone
+            // leave a hole in the middle that the card shows through.
+            let lobes = [p(0.0, -0.25), p(-0.25, 0.07), p(0.25, 0.07)];
+            for (x, y) in lobes {
                 ctx.move_to(x + r, y);
                 let _ = ctx.arc(x, y, r, 0.0, 2.0 * PI);
             }
+            let (x, y) = p(0.0, -0.01);
+            let hub = 0.16 * size;
+            ctx.move_to(x + hub, y);
+            let _ = ctx.arc(x, y, hub, 0.0, 2.0 * PI);
             let (x, y) = p(0.0, -0.05);
             ctx.move_to(x, y);
             line(ctx, p(0.08, 0.12));
