@@ -12,7 +12,7 @@ cargo run --release -- --game spider --rule suits=1   # the ten-column, two-deck
 cargo run --release -- --list                         # games and their rules
 
 cargo test                          # 280 tests (277 core, 3 tui adapter)
-cargo test -p solitaire-gui          # the card table's 13 layout/animation/menu tests
+cargo test -p solitaire-gui          # the card table's 14 layout/animation/menu tests
 cargo test undo_round_trips         # one test, by substring of its name
 cargo test -- --nocapture           # many render tests print the board they asserted on
 
@@ -128,7 +128,10 @@ refused one, keeping the refusal message). It reads state back through
 - `layout.rs` is its single source of truth, mirroring `ui/layout.rs`: built from
   the game's `BoardSpec`, drawn from by `render.rs`, hit-tested by `hit` and
   `drop_target`. `every_card_drawn_in_a_fan_resolves_back_to_itself` guards it
-  for every game at desktop, phone, short and huge sizes.
+  for every game at desktop, phone, short and huge sizes. Unlike the terminal,
+  its row heights never depend on the board: a fanned row above the working row
+  (Mod3's foundations) is reserved at its full four cards, so nothing shifts as
+  it fills — `mod3_foundation_rows_do_not_move_as_they_fill`.
 - `anim.rs` animates by **diffing**: snapshot where every card is shown before
   an input, lay out after it, pair cards by value (same place first, then the
   nearest twin for two-deck games), tween whatever moved or flipped. That covers

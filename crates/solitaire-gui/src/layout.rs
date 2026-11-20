@@ -45,6 +45,10 @@ fn up_step(card_w: f64) -> f64 {
         UP_STEP
     }
 }
+/// The most cards a fanned row above the working row ever holds: Mod3's
+/// foundations are a base and three builds. Such a row is given that much
+/// room up front, so it never grows and the rows below it never move.
+const STACK_ROW_CARDS: f64 = 4.0;
 /// Cards stop growing here; a huge monitor gets a roomier table, not posters.
 const MAX_W: f64 = 140.0;
 /// Below this the table is not worth drawing at all.
@@ -195,8 +199,8 @@ fn is_fanned(spec: &BoardSpec, row: u8) -> bool {
 /// How tall the table wants to be, in card widths, so the card size can be
 /// capped by height before any card is dealt. A working row is planned for a
 /// handful of face-up cards on a few face-down ones, beyond which it squeezes;
-/// a fanned row above it (Mod3's foundations) for two or three, since those
-/// start with one card each and fill slowly.
+/// a fanned row above it (Mod3's foundations) for its full
+/// [`STACK_ROW_CARDS`], which it is always given.
 fn planned_height(spec: &BoardSpec) -> f64 {
     let rows = spec.rows();
     let fanned: Vec<u8> = (0..rows).filter(|&r| is_fanned(spec, r)).collect();
@@ -204,22 +208,11 @@ fn planned_height(spec: &BoardSpec) -> f64 {
     let rows_h: f64 = (0..rows)
         .map(|row| match fanned.iter().position(|&r| r == row) {
             Some(i) if i + 1 == fanned.len() => ASPECT * deep,
-            Some(_) => ASPECT * (1.0 + 1.5 * UP_STEP),
+            Some(_) => ASPECT * (1.0 + (STACK_ROW_CARDS - 1.0) * UP_STEP),
             None => ASPECT,
         })
         .sum();
     rows_h + ROW_GAP * f64::from(rows.saturating_sub(1)) + 2.0 * MARGIN
-}
-
-/// How far a fanned pile reaches below its first card, with its natural steps.
-fn extent(board: &Board, pile: PileId, card_w: f64, card_h: f64) -> f64 {
-    let p = board.pile(pile);
-    if p.is_empty() {
-        return 0.0;
-    }
-    let down = p.face_down().min(p.len() - 1);
-    let up = p.len() - 1 - down;
-    card_h * (down as f64 * DOWN_STEP + up as f64 * up_step(card_w))
 }
 
 /// Lay `spec` out in a `width` × `height` table. `None` when that is too small
@@ -241,41 +234,27 @@ pub fn compute(spec: &BoardSpec, board: &Board, width: f64, height: f64) -> Opti
     let margin = card_w * MARGIN;
     let row_gap = card_w * ROW_GAP;
 
-    // Fixed rows take a card's height; fanned rows are sized by their deepest
-    // pile, and whatever height is left goes to the last fanned row — the
-    // working row — so the rows above it do not jump as it fills.
+    // Fixed rows take a card's height. A fanned row above the working row
+    // (Mod3's foundations) is reserved at its full depth whatever it holds,
+    // and whatever height is left goes to the last fanned row — the working
+    // row — so no row ever moves as the piles above it fill. The heights
+    // depend on the spec alone, never on the board.
     let fanned: Vec<u8> = (0..rows).filter(|&r| is_fanned(spec, r)).collect();
     let fixed = card_h * f64::from(rows - fanned.len() as u8);
     let space = (height - 2.0 * margin - row_gap * f64::from(rows - 1) - fixed)
         .max(card_h * fanned.len() as f64);
-    let mut heights: Vec<f64> = fanned
-        .iter()
-        .map(|&row| {
-            let deepest = spec
-                .row(row)
-                .filter(|spot| spot.fan == Fan::Down)
-                .map(|spot| extent(board, spot.pile, card_w, card_h))
-                .fold(0.0, f64::max);
-            card_h + deepest
-        })
-        .collect();
-    let total: f64 = heights.iter().sum();
-    if total < space {
-        if let Some(last) = heights.last_mut() {
-            *last += space - total;
-        }
+    let upper = fanned.len().saturating_sub(1);
+    let full = card_h * (1.0 + (STACK_ROW_CARDS - 1.0) * up_step(card_w));
+    // Too short for every upper row at full depth plus a card for the working
+    // row: the upper rows shrink alike, and `fan_down` squeezes into them.
+    let stack_h = if upper == 0 {
+        0.0
     } else {
-        // Too deep: cap every row at the same height, found by bisection, so
-        // the tallest give way first and nothing drops below one card.
-        let (mut low, mut high) = (card_h, heights.iter().copied().fold(card_h, f64::max));
-        for _ in 0..40 {
-            let cap = (low + high) / 2.0;
-            let sum: f64 = heights.iter().map(|h| h.min(cap)).sum();
-            if sum > space { high = cap } else { low = cap }
-        }
-        for h in &mut heights {
-            *h = h.min(low).max(card_h);
-        }
+        full.min((space - card_h) / upper as f64).max(card_h)
+    };
+    let mut heights = vec![stack_h; upper];
+    if !fanned.is_empty() {
+        heights.push((space - stack_h * upper as f64).max(card_h));
     }
 
     let board_w = units * card_w + (units - 1.0) * gap;
@@ -494,6 +473,28 @@ mod tests {
                     pile.pile,
                     last.bottom()
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn mod3_foundation_rows_do_not_move_as_they_fill() {
+        use solitaire_tui_core::board::Action;
+        let game = rules::find("mod3").unwrap();
+        let opening = game.deal(42);
+        let mut full = opening.clone();
+        // Grow the first foundation pile of each row to its full four cards.
+        // The layout takes no notice of legality, only of depth.
+        for first in [8, 16, 24] {
+            for from in first + 1..first + 4 {
+                full.apply(&Action::moving(&full, from, 0, first));
+            }
+        }
+        for (w, h) in SIZES {
+            let before = compute(&game.spec(&opening), &opening, w, h).unwrap();
+            let after = compute(&game.spec(&full), &full, w, h).unwrap();
+            for (a, b) in before.piles.iter().zip(&after.piles) {
+                assert_eq!(a.base, b.base, "pile {} at {w}×{h}", a.pile);
             }
         }
     }
