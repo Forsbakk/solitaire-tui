@@ -28,9 +28,12 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      # Pinned: the action's `latest` resolves to trunk 0.19, which ignores
+      # `data-wasm-opt-params` in index.html — wasm-opt then rejects the
+      # bulk-memory ops rustc emits by default.
       - uses: jetli/trunk-action@v0.5.0
         with:
-          version: latest
+          version: v0.22.2
       # The card table is the site; the terminal build lives beside it at
       # /tui/, linked from the game menu. Both use relative asset URLs, so
       # neither needs to know where it is mounted.
